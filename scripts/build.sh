@@ -4,6 +4,7 @@
 #   scripts/build.sh mac       맥 유니버설 앱 → dist/GodseonSync-<버전>-mac.dmg   (맥에서만)
 #   scripts/build.sh windows   윈도우 실행 파일 → build/windows-amd64/GodseonSync.exe, dist/...-windows-portable.zip
 #                              설치 파일은 윈도우에서 Inno Setup 으로 packaging/windows/GodseonSync.iss 를 컴파일한다
+#   scripts/build.sh windows-zip  build/windows-amd64 로 portable zip 만 다시 만든다 (Actions 에서 exe 를 서명한 뒤)
 #   scripts/build.sh linux     리눅스 → dist/GodseonSync-<버전>-linux-<아키텍처>.tar.gz
 #
 # 환경 변수
@@ -72,14 +73,21 @@ build_windows() {
   icons
   local arch=amd64 out=build/windows-amd64
   mkdir -p "$out"
-  # 앱 아이콘과 매니페스트(고해상도 화면, 긴 경로)를 실행 파일에 넣는다
-  go run github.com/akavel/rsrc@v0.10.2 -arch $arch -manifest packaging/windows/app.manifest \
-    -ico build/icons/app.ico -o rsrc_windows_${arch}.syso
+  # 매니페스트(고해상도 화면, 긴 경로, 1번)·앱 아이콘(2번 — 설정 창이 이 번호로 찾는다)·버전 정보(제품 이름·버전 —
+  # 코드 서명(SignPath)이 이 값을 확인한다)를 실행 파일에 넣는다. 윈도우 버전 숫자는 '0.1.0-beta' 의 '0.1.0' 부분만.
+  local winver="${VERSION%%[!0-9.]*}"
+  go run github.com/tc-hib/go-winres@v0.3.3 make --in packaging/windows/winres.json --arch $arch \
+    --product-version "${winver:-0.0.0}" --file-version "${winver:-0.0.0}" --out rsrc
   echo "== Windows ${arch}"
   CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -ldflags "$LDFLAGS -H windowsgui" -o "$out/GodseonSync.exe" .
   rm -f rsrc_windows_${arch}.syso
   licenses "$out/GodseonSync.exe" "$out/THIRD_PARTY_LICENSES.txt"
   cp LICENSE "$out/LICENSE.txt"
+  zip_windows
+}
+
+zip_windows() {
+  local out=build/windows-amd64
   local zip="dist/GodseonSync-${VERSION}-windows-portable.zip"
   rm -f "$zip"
   if command -v zip >/dev/null; then
@@ -106,6 +114,7 @@ build_linux() {
 case "${1:-}" in
   mac) build_mac ;;
   windows) build_windows ;;
+  windows-zip) zip_windows ;;
   linux) build_linux ;;
-  *) echo "사용법: $0 mac|windows|linux" >&2; exit 2 ;;
+  *) echo "사용법: $0 mac|windows|windows-zip|linux" >&2; exit 2 ;;
 esac

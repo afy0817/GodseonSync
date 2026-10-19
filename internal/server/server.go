@@ -53,6 +53,8 @@ type Server struct {
 	job   *rclone.ConnectJob
 	// migrating 은 저장소를 옮기는 중인지다 (migrate.go). 그동안 드라이브 설정 받기·저장을 막는다.
 	migrating atomic.Bool
+	// picking 은 폴더 선택 창이 떠 있는 동안 잠긴다 (창은 하나만)
+	picking sync.Mutex
 
 	// 전용 설정 창 프로세스와의 연락 (창이 롱 폴링으로 명령을 기다린다)
 	winMu      sync.Mutex
@@ -1096,6 +1098,11 @@ func (s *Server) pickFolder(r *http.Request) (any, error) {
 	if err := decode(r, &body); err != nil {
 		return nil, err
 	}
+	// 창이 숨어 응답 없는 요청이 쌓이면 화면의 다른 요청까지 막힌다 (브라우저는 한 주소에 연결 6개)
+	if !s.picking.TryLock() {
+		return nil, fail(http.StatusConflict, "폴더 선택 창이 이미 열려 있습니다.")
+	}
+	defer s.picking.Unlock()
 	p, err := platform.PickFolder(body.Initial, i18n.T("동기화할 폴더를 고르세요"))
 	if err != nil {
 		return nil, err

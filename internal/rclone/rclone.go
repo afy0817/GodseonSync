@@ -113,6 +113,15 @@ func (r Result) Err(what string) error {
 	return &Error{Code: r.Code, Msg: msg, Output: r.Stderr}
 }
 
+// LaunchError 는 rclone 프로세스를 띄우지 못했을 때 보여 줄 문구다. OS 보안 정책이 막은 것은 원인과 할 일을 알린다
+// (영어 시스템 문구 'An Application Control policy has blocked this file' 만으로는 알기 어렵다).
+func LaunchError(err error) string {
+	if platform.LaunchBlocked(err) {
+		return i18n.T("윈도우 스마트 앱 컨트롤(또는 앱 컨트롤 정책)이 GodseonSync 실행을 막았습니다. 코드 서명이 없는 앱이라 생깁니다 — README 의 '처음 실행할 때 경고가 뜨면' 을 보세요")
+	}
+	return i18n.T("rclone 을 실행할 수 없습니다: %v", err)
+}
+
 // Exec 는 rclone 을 실행한다. 실행 자체가 안 되거나 시간이 넘었을 때만 오류를 돌려준다.
 func (c *Client) Exec(timeout time.Duration, input *string, args ...string) (Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -131,7 +140,7 @@ func (c *Client) Exec(timeout time.Duration, input *string, args ...string) (Res
 	if err != nil {
 		var ee *exec.ExitError
 		if !errors.As(err, &ee) {
-			return res, &Error{Code: -1, Msg: i18n.T("rclone 을 실행할 수 없습니다: %v", err)}
+			return res, &Error{Code: -1, Msg: LaunchError(err)}
 		}
 		res.Code = ee.ExitCode()
 	}

@@ -38,6 +38,12 @@
   - "GodseonSync 에서 알림을 보내려고 합니다" 가 뜨면 **허용**을 누릅니다 (동기화 실패·결정 필요를 알려 줍니다).
 - **윈도우**: "Windows의 PC 보호" 창이 뜨면 **추가 정보 › 실행**을 누릅니다.
   설정 창은 Microsoft Edge WebView2 를 씁니다 (Windows 10/11 에 기본으로 들어 있음). 없으면 기본 브라우저로 열립니다.
+  - **스마트 앱 컨트롤**(Windows 11, **Windows 보안 › 앱 및 브라우저 컨트롤**)이 켜져 있으면 서명 없는 GodseonSync 를 막을 수 있습니다.
+    잘 되다가도 Windows 의 평판 판단이 바뀌면 막히며, 그러면 알림에 "스마트 앱 컨트롤 … 이 GodseonSync 실행을 막았습니다" 가 뜨고 동기화가 멈춥니다.
+    스마트 앱 컨트롤에는 앱 하나만 허용하는 방법이 없어서, 계속 쓰려면 스마트 앱 컨트롤을 꺼야 합니다.
+    Windows 버전에 따라 한 번 끄면 Windows 를 다시 설치하기 전에는 다시 켤 수 없으니, 끌지는 직접 판단하세요.
+  - 코드 서명이 붙은 릴리스부터는 스마트 앱 컨트롤이 허용합니다 ([Code signing policy](#code-signing-policy)).
+    서명이 붙었는지는 `GodseonSync.exe` 속성 › **디지털 서명**에 'SignPath Foundation' 이 있는지로 봅니다.
 
 ## 처음 설정
 
@@ -199,14 +205,16 @@ GodseonSync quit               실행 중인 GodseonSync 끝내기
 PC 마다 아래 폴더에 이 PC 의 설정, 동기화 기록, 로그, 로그인 정보가 있습니다. 저장소에는 올라가지 않습니다.
 
 - 맥: `~/Library/Application Support/GodseonSync`
-- 윈도우: `%LOCALAPPDATA%\GodseonSync`
+- 윈도우: `%LOCALAPPDATA%\GodseonSync` (OS 알림에 쓰는 아이콘 `notify-icon.png` 도 여기에 있습니다)
+  - 레지스트리: OS 알림에 보일 이름·아이콘 `HKCU\Software\Classes\AppUserModelId\GodseonSync`,
+    알림을 누르면 설정 창을 여는 주소 `HKCU\Software\Classes\godseonsync`. 설치판은 제거 프로그램이 지웁니다.
 - 리눅스: `~/.local/state/godseonsync`
 
 **완전히 지우기**
 
 1. 트레이 메뉴 › **GodseonSync 종료**
 2. 로그인 자동 실행 끄기: 설정 › 일반, 또는 `GodseonSync autostart off` (윈도우 설치판은 제거 프로그램이 해 줍니다)
-3. 앱을 지우고, 위의 데이터 폴더를 지웁니다.
+3. 앱을 지우고, 위의 데이터 폴더를 지웁니다. 윈도우 포터블판은 위 레지스트리 두 키도 지웁니다 (설치판은 제거 프로그램이 지움).
 4. 모든 PC 에서 그만 쓸 때만 저장소의 `GodseonSync/setting.json`, `GodseonSync/.status` 를 지웁니다.
 
 동기화한 파일은 PC·저장소 어디에서도 지워지지 않습니다.
@@ -215,6 +223,16 @@ PC 마다 아래 폴더에 이 PC 의 설정, 동기화 기록, 로그, 로그�
 
 GodseonSync 는 파일을 사용자의 PC 와 사용자 본인의 저장소(구글 드라이브·SFTP 서버) 사이에서만 옮기고, 개발자나 다른 서버로 보내지 않습니다.
 자세한 내용은 [개인정보처리방침](PRIVACY.md) 에 있습니다.
+
+## Code signing policy
+
+윈도우 배포 파일(`GodseonSync.exe`, 설치 파일, 제거 프로그램)은 SignPath Foundation 인증서로 코드 서명합니다.
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- 서명하는 파일은 이 저장소의 소스로 GitHub Actions 가 빌드한 것뿐이고, 릴리스마다 승인자가 서명 요청을 직접 승인합니다.
+- Committers and reviewers: [afy0817](https://github.com/afy0817)
+- Approvers: [afy0817](https://github.com/afy0817)
+- 개인정보: GodseonSync 는 사용자가 연결한 저장소(구글 드라이브·SFTP 서버) 말고 다른 곳으로 정보를 보내지 않습니다 — [개인정보처리방침](PRIVACY.md).
 
 ## 라이선스
 
@@ -238,4 +256,7 @@ GodseonSync keeps folders on multiple PCs in two-way sync through Google Drive o
 
 Download from [Releases](https://github.com/afy0817/GodseonSync/releases). On first launch, macOS may say the developer can't be verified:
 open **System Settings › Privacy & Security** and click **Open Anyway**. On Windows, click **More info › Run anyway**.
+Windows 11 **Smart App Control** may block the app because it isn't code-signed (syncing stops with a "Smart App Control … blocked GodseonSync" notice);
+it has no per-app exception, so the app only keeps working with Smart App Control turned off — decide that yourself, since on some Windows versions it can't be turned back on without reinstalling.
+Releases with a code signature (SignPath Foundation) are allowed by Smart App Control — see the [code signing policy](#code-signing-policy).
 Files move only between your PCs and your own storage — see the [privacy policy](PRIVACY.md).

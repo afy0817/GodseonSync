@@ -163,7 +163,7 @@ const S = {
   tab: loadTab(), // 지금 화면(왼쪽 메뉴): folders / pcs / settings
   settingsTab: loadPref('gs-settings-tab', 'general').replace(/^storage$/, 'mode'), // 설정 화면 안의 탭 (예전 이름 storage)
   drawerCollapsed: loadPref('gs-drawer', innerWidth < 760 ? 'collapsed' : 'expanded') === 'collapsed',
-  nt: { open: false, items: [], unread: 0, filter: 'all', opened: new Set() }, // 알림 센터
+  nt: { open: false, items: [], unread: 0, filter: 'all', opened: new Set(), loaded: false, failed: false }, // 알림 센터 (loaded: 목록을 한 번이라도 받았는지)
 };
 
 const SETTINGS_TABS = [['general', '일반'], ['exclude', '제외 규칙'], ['mode', '모드'], ['pc', '이 PC'], ['log', '로그']];
@@ -954,6 +954,18 @@ function renderModeTab() {
     </section>`;
 }
 
+// 폴더 선택 창. 윈도우 전용 창에서는 창 프로세스가 설정 창에 붙은(모달) 탐색기 창으로 띄운다 (gsPickFolder, window_windows.go).
+// 그 밖에는 에이전트가 띄운다. 에이전트가 띄우면 윈도우에서는 설정 창 뒤에 숨는다 (백그라운드 프로세스는 앞으로 못 나온다).
+function pickFolder(initial) {
+  if (typeof window.gsPickFolder !== 'function') return api('/api/pick-folder', { initial });
+  return new Promise((resolve, reject) => {
+    window.gsFolderPicked = (r) => (r.error ? reject(new Error(r.error)) : resolve(r));
+    window.gsPickFolder(initial, t('동기화할 폴더를 고르세요')).then((ok) => {
+      if (!ok) reject(new Error(t('폴더 선택 창이 이미 열려 있습니다.')));
+    }, reject);
+  });
+}
+
 // ---------------------------------------------------------------- 알림 센터
 
 async function loadNotices() {
@@ -961,7 +973,11 @@ async function loadNotices() {
     const r = await api('/api/notices');
     S.nt.items = r.items || [];
     S.nt.unread = r.unread || 0;
-  } catch (e) { /* 다음 번에 */ }
+    S.nt.loaded = true;
+    S.nt.failed = false;
+  } catch (e) {
+    S.nt.failed = true; // 불러온 적이 있으면 그 목록을 그대로 둔다 (다음 번에 다시)
+  }
   renderNoticePanel();
   renderTopbar();
 }
@@ -985,7 +1001,9 @@ function renderNoticePanel() {
       <button class="${S.nt.filter === 'unread' ? 'active' : ''}" data-action="notices-filter" data-filter="unread">${t('안 읽음')} ${S.nt.unread}</button>
     </div>
     <div class="np-list">
-      ${items.length ? items.map((n) => `
+      ${!S.nt.loaded ? `<div class="np-empty">${S.nt.failed // 받기 전에는 '알림이 없습니다' 가 아니다 (배지 숫자와 어긋나 보인다)
+        ? `${t('알림을 불러오지 못했습니다.')} <button class="btn small" data-action="notices-reload">${t('다시 시도')}</button>`
+        : t('불러오는 중…')}</div>` : items.length ? items.map((n) => `
         <div class="np-item ${n.read ? '' : 'unread'} ${S.nt.opened.has(n.id) ? 'open' : ''}" data-action="notice-open" data-id="${esc(n.id)}">
           <span class="lv ${esc(n.level)}"></span>
           <div>
@@ -1005,6 +1023,7 @@ async function noticeCall(path, body) {
   const r = await api(path, body);
   S.nt.items = r.items || [];
   S.nt.unread = r.unread || 0;
+  S.nt.loaded = true;
   renderNoticePanel();
   renderTopbar();
 }
@@ -1329,7 +1348,7 @@ const actions = {
     const f = S.draft.folders[i];
     b.disabled = true;
     try {
-      const r = await api('/api/pick-folder', { initial: (f.paths || {})[me()] || S.overview.home });
+      const r = await pickFolder((f.paths || {})[me()] || S.overview.home);
       if (r.path) {
         f.paths = f.paths || {};
         f.paths[me()] = r.path;
@@ -1447,6 +1466,11 @@ const actions = {
     renderTopbar();
     renderNoticePanel();
     if (S.nt.open) await loadNotices();
+  },
+  async 'notices-reload'() {
+    S.nt.failed = false;
+    renderNoticePanel();
+    await loadNotices();
   },
   'notices-filter'(b) {
     S.nt.filter = b.dataset.filter;

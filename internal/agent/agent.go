@@ -79,6 +79,8 @@ func RequestOpenUI() error {
 	if err := store.ReadJSON(store.UIFile(), &info); err != nil {
 		return err
 	}
+	// 알림·시작 메뉴로 실행된 이 프로세스는 앞으로 나올 권한이 있다 → 창을 띄울 에이전트·창 프로세스에 넘긴다 (윈도우)
+	platform.AllowForeground()
 	req, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:%d/api/ui/open", info.Port), strings.NewReader("{}"))
 	req.Header.Set("X-GS-Token", info.Token)
 	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
@@ -162,6 +164,7 @@ func (a *Agent) SettingsChanged() {
 // 전용 창을 쓸 수 없는 OS 이거나 창을 띄우지 못하면 기본 브라우저로 연다.
 func (a *Agent) OpenUI() {
 	url := a.srv.URL()
+	platform.AllowForeground() // 트레이 아이콘을 누른 경우 이 프로세스의 권한을 창 프로세스에 넘긴다 (윈도우)
 	if a.srv.WindowActive() {
 		a.srv.SendWindow("focus")
 		return

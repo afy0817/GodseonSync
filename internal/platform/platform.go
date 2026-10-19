@@ -99,11 +99,15 @@ func OpenBrowser(url string) error {
 	return c.Start()
 }
 
+// LaunchBlocked 는 OS 보안 정책이 실행 파일을 막아 프로세스를 띄우지 못한 오류인지다.
+// 윈도우 스마트 앱 컨트롤은 서명 없는 실행 파일을 평판으로 판단해서, 어제 되던 GodseonSync(rclone 을 띄우는 자기 자신)를 막기도 한다.
+func LaunchBlocked(err error) bool { return launchBlocked(err) }
+
 // SetupNotifications 는 알림을 눌렀을 때 할 일과 알림을 못 보낼 때 남길 곳을 정한다 (에이전트가 시작할 때 부른다).
-// 맥은 이때 알림 권한을 묻는다 (처음 한 번).
+// 맥은 이때 알림 권한을 묻는다 (처음 한 번). 윈도우는 알림에 보일 앱 이름·아이콘과 누르면 열 명령을 등록한다.
 func SetupNotifications(onClick func(), onError func(string)) { setupNotify(onClick, onError) }
 
-// Notify 는 OS 알림을 띄운다 (실패해도 무시).
+// Notify 는 OS 알림을 띄운다 (실패해도 무시). 맥·윈도우는 OS API 로 보내고, 못 보내면 아래 명령으로 보낸다.
 func Notify(title, message string) {
 	if nativeNotify(title, message) {
 		return
@@ -129,20 +133,28 @@ func Notify(title, message string) {
 	go func() { _ = c.Wait() }()
 }
 
-// psAppID 는 윈도우 알림을 띄울 때 쓰는 앱 ID 다. 등록되지 않은 ID 로는 알림이 안 떠서 PowerShell 의 ID 를 빌린다.
+// psAppID 는 GodseonSync 앱 ID 를 등록하지 못했을 때 빌려 쓰는 PowerShell 의 앱 ID 다 (등록되지 않은 ID 로는 알림이 안 뜬다).
 const psAppID = `{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe`
 
-// PickFolder 는 OS 기본 폴더 선택 창을 띄운다. 취소하면 빈 문자열.
-func PickFolder(initial, prompt string) (string, error) {
-	start := ""
-	if initial != "" {
-		p := ExpandPath(initial)
-		if st, err := os.Stat(p); err == nil && st.IsDir() {
-			start = p
-		} else if st, err := os.Stat(filepath.Dir(p)); err == nil && st.IsDir() {
-			start = filepath.Dir(p)
-		}
+// pickStart 는 폴더 선택 창을 처음 열 위치다: initial 이 있으면 그 폴더, 없으면 그 위 폴더, 둘 다 없으면 빈 문자열.
+func pickStart(initial string) string {
+	if initial == "" {
+		return ""
 	}
+	p := ExpandPath(initial)
+	if st, err := os.Stat(p); err == nil && st.IsDir() {
+		return p
+	}
+	if st, err := os.Stat(filepath.Dir(p)); err == nil && st.IsDir() {
+		return filepath.Dir(p)
+	}
+	return ""
+}
+
+// PickFolder 는 OS 기본 폴더 선택 창을 띄운다. 취소하면 빈 문자열.
+// 윈도우 전용 설정 창은 이것 대신 창 프로세스가 PickFolderIn 으로 설정 창에 붙여 띄운다.
+func PickFolder(initial, prompt string) (string, error) {
+	start := pickStart(initial)
 	switch runtime.GOOS {
 	case "darwin":
 		loc := ""
@@ -159,23 +171,7 @@ func PickFolder(initial, prompt string) (string, error) {
 		}
 		return p, nil
 	case "windows":
-		script := "[Console]::OutputEncoding = [Text.Encoding]::UTF8\n" +
-			"Add-Type -AssemblyName System.Windows.Forms\n" +
-			"$d = New-Object System.Windows.Forms.FolderBrowserDialog\n" +
-			"$d.Description = " + psString(prompt) + "\n" +
-			"$d.ShowNewFolderButton = $true\n"
-		if start != "" {
-			script += "$d.SelectedPath = " + psString(start) + "\n"
-		}
-		script += "$o = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}\n" +
-			"if ($d.ShowDialog($o) -eq 'OK') { $d.SelectedPath }\n"
-		c := exec.Command("powershell", "-NoProfile", "-STA", "-Command", script)
-		HideWindow(c)
-		out, err := c.Output()
-		if err != nil {
-			return "", err
-		}
-		return strings.TrimSpace(string(out)), nil
+		return pickFolderWindows(start, prompt)
 	default:
 		var c *exec.Cmd
 		if _, err := exec.LookPath("zenity"); err == nil {

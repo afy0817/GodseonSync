@@ -427,7 +427,7 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 		return false
 	}
 	if err != nil {
-		return fail(i18n.T("rclone 을 실행할 수 없습니다: %v", err))
+		return fail(rclone.LaunchError(err))
 	}
 	if opt.DryRun {
 		if code == 0 {
@@ -495,7 +495,7 @@ func overwrite(ctx context.Context, drive *config.Drive, lg store.FolderLog, sw,
 		code, err := drive.RC.Stream(ctx, func(line string) { p.line(rclone.StripTimestamp(line)) }, args...)
 		switch {
 		case err != nil:
-			return fmt.Errorf(i18n.T("%s: rclone 을 실행할 수 없습니다: %v"), what, err)
+			return fmt.Errorf("%s: %s", what, rclone.LaunchError(err))
 		case ctx.Err() != nil:
 			return ctx.Err()
 		case code != 0:

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath 아티팩트 설정 'installer': 릴리스 워크플로의 두 번째 서명 요청 (서명된 exe·제거 프로그램이 든 Inno Setup 설치 파일) -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="setup.exe" product-name="GodseonSync" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

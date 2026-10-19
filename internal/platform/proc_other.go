@@ -17,3 +17,9 @@ func Detach(c *exec.Cmd) {
 
 // AttachParentConsole 은 윈도우에서만 필요하다.
 func AttachParentConsole() {}
+
+// AllowForeground 는 윈도우에서만 필요하다.
+func AllowForeground() {}
+
+// launchBlocked 는 윈도우에서만 쓴다.
+func launchBlocked(err error) bool { return false }
