@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GodseonSync</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icon.svg" alt="" width="28" height="28">
+      <span class="brand-name">GodseonSync</span>
+      <span class="brand-version" id="app-version"></span>
+    </div>
+    <div class="topbar-right" id="topbar-right"></div>
+  </header>
+
+  <div id="notice-panel" class="notice-panel" hidden></div>
+
+  <div class="shell">
+    <nav id="drawer" class="drawer" hidden></nav>
+    <main id="main" class="main">
+      <div class="loading">…</div>
+    </main>
+  </div>
+
+  <div id="savebar" class="savebar" hidden></div>
+
+  <div id="modal-root"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key><string>GodseonSync</string>
+	<key>CFBundleDisplayName</key><string>GodseonSync</string>
+	<key>CFBundleIdentifier</key><string>io.github.afy0817.godseonsync</string>
+	<key>CFBundleExecutable</key><string>GodseonSync</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>__VERSION__</string>
+	<key>CFBundleVersion</key><string>__VERSION__</string>
+	<key>CFBundleDevelopmentRegion</key><string>ko</string>
+	<key>LSMinimumSystemVersion</key><string>13.0</string>
+	<key>LSUIElement</key><true/>
+	<key>NSHighResolutionCapable</key><true/>
+	<key>NSHumanReadableCopyright</key><string>MIT License — https://github.com/afy0817/GodseonSync</string>
+	<key>NSAppTransportSecurity</key>
+	<dict><key>NSAllowsLocalNetworking</key><true/></dict>
+	<key>NSDocumentsFolderUsageDescription</key><string>동기화할 폴더가 문서 폴더 안에 있으면 접근해야 합니다.</string>
+	<key>NSDesktopFolderUsageDescription</key><string>동기화할 폴더가 데스크탑 폴더 안에 있으면 접근해야 합니다.</string>
+	<key>NSDownloadsFolderUsageDescription</key><string>동기화할 폴더가 다운로드 폴더 안에 있으면 접근해야 합니다.</string>
+	<key>NSRemovableVolumesUsageDescription</key><string>동기화할 폴더가 외장 디스크에 있으면 접근해야 합니다.</string>
+	<key>NSNetworkVolumesUsageDescription</key><string>동기화할 폴더가 네트워크 드라이브에 있으면 접근해야 합니다.</string>
+</dict>
+</plist>

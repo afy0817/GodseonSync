@@ -1,0 +1,18 @@
+# 빌드 결과
+/build/
+/dist/
+*.syso
+
+# 맥
+.DS_Store
+
+# 편집기
+.idea/
+.vscode/
+
+# Claude Code 작업 문서 (이 PC 전용: 인계 todo, 프로젝트 메모, 스킬)
+.claude/
+/CLAUDE.md
+/CLAUDE.local.md
+/TODO.md
+/todo.md

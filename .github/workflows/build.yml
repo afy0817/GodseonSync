@@ -1,0 +1,111 @@
+name: Build
+
+# 버전 태그(v0.1.0, v0.2.0-beta 등)를 push 할 때만 돈다: 테스트 → 세 OS 빌드 → Release.
+# main 에 push 하거나 PR 을 열 때는 돌지 않는다.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+
+  macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build app and dmg
+        env:
+          GS_GOOGLE_CLIENT_ID: ${{ secrets.GS_GOOGLE_CLIENT_ID }}
+          GS_GOOGLE_CLIENT_SECRET: ${{ secrets.GS_GOOGLE_CLIENT_SECRET }}
+        run: scripts/build.sh mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*.dmg
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build exe and portable zip
+        env:
+          GS_GOOGLE_CLIENT_ID: ${{ secrets.GS_GOOGLE_CLIENT_ID }}
+          GS_GOOGLE_CLIENT_SECRET: ${{ secrets.GS_GOOGLE_CLIENT_SECRET }}
+        run: scripts/build.sh windows
+      - name: Build installer (Inno Setup)
+        run: |
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [ ! -f "$ISCC" ]; then choco install innosetup -y --no-progress; fi
+          VERSION="$(git describe --tags --always)"
+          # Git Bash 는 / 로 시작하는 인자를 경로로 바꾼다 (/DAppVersion=… → C:/Program Files/Git/DAppVersion=…) → 이 명령만 끈다
+          MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$ISCC" "/DAppVersion=${VERSION#v}" packaging/windows/GodseonSync.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.exe
+            dist/*.zip
+
+  linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build tarballs
+        env:
+          GS_GOOGLE_CLIENT_ID: ${{ secrets.GS_GOOGLE_CLIENT_ID }}
+          GS_GOOGLE_CLIENT_SECRET: ${{ secrets.GS_GOOGLE_CLIENT_SECRET }}
+        run: scripts/build.sh linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
