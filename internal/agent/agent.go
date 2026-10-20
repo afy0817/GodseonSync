@@ -64,6 +64,8 @@ type Agent struct {
 	quit    chan struct{}
 	once    sync.Once
 
+	lastFail string // 마지막으로 OS 알림을 보낸 동기화 중단 오류 (scheduler 고루틴만 쓴다)
+
 	mu            sync.Mutex
 	running       bool
 	tray          *trayMenu
@@ -222,8 +224,18 @@ func (a *Agent) Quit() {
 
 // ------------------------------------------------------------ 예약 동기화
 
+// retryDelay 는 다음 동기화까지 기다릴 시간이다. 동기화가 통째로 중단되면(켜자마자 네트워크가 아직 불안정할 때 등)
+// 주기를 다 기다리지 않고 1·2·4·8… 분 뒤 다시 해 본다. 주기보다 길게는 기다리지 않는다.
+func retryDelay(interval time.Duration, failures int) time.Duration {
+	if failures <= 0 {
+		return interval
+	}
+	return min(time.Minute<<min(failures-1, 6), interval)
+}
+
 func (a *Agent) scheduler() {
 	next := time.Now().Add(15 * time.Second) // 켜고 조금 뒤 첫 동기화
+	failures := 0                            // 연달아 중단된 횟수
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -251,8 +263,17 @@ func (a *Agent) scheduler() {
 			return
 		default:
 		}
-		a.runSync(*opt)
-		next = time.Now().Add(time.Duration(store.LoadSettings().IntervalMinutes) * time.Minute)
+		if a.runSync(*opt) {
+			failures = 0
+		} else {
+			failures++
+		}
+		interval := time.Duration(store.LoadSettings().IntervalMinutes) * time.Minute
+		delay := retryDelay(interval, failures)
+		if delay < interval {
+			store.Log("%d분 뒤 다시 동기화합니다", int(delay/time.Minute))
+		}
+		next = time.Now().Add(delay)
 	}
 }
 
@@ -262,7 +283,8 @@ func (a *Agent) isRunning() bool {
 	return a.running
 }
 
-func (a *Agent) runSync(opt engine.Options) {
+// runSync 는 동기화를 한 번 하고, 통째로 중단됐으면 false 를 돌려준다 (폴더 일부 실패는 true).
+func (a *Agent) runSync(opt engine.Options) bool {
 	a.mu.Lock()
 	a.running = true
 	a.mu.Unlock()
@@ -275,16 +297,25 @@ func (a *Agent) runSync(opt engine.Options) {
 	a.running = false
 	a.mu.Unlock()
 	a.refreshTray()
-	if err != nil {
-		if !errors.Is(err, engine.ErrNotConfigured) {
+	if err != nil && !errors.Is(err, engine.ErrNotConfigured) {
+		// 다시 시도해도 같은 오류면 OS 알림은 처음 한 번만 (알림 센터에는 같은 알림의 횟수가 늘어난다)
+		if msg := err.Error(); msg != a.lastFail {
+			a.lastFail = msg
 			platform.Notify("GodseonSync", i18n.T("동기화 중단: %v", err))
 		}
-	} else if len(res.Failed) > 0 {
+		return false
+	}
+	a.lastFail = ""
+	if err != nil { // 처음 설정 전
+		return true
+	}
+	if len(res.Failed) > 0 {
 		platform.Notify("GodseonSync", i18n.T("동기화 실패: %s", strings.Join(res.Failed, ", ")))
 	}
-	if err == nil && len(res.NeedChoice) > 0 {
+	if len(res.NeedChoice) > 0 {
 		platform.Notify("GodseonSync", i18n.T("이 PC 와 드라이브에 둘 다 파일이 있어 멈춘 폴더가 있습니다. 설정 화면에서 어느 쪽으로 맞출지 고르세요: %s", strings.Join(res.NeedChoice, ", ")))
 	}
+	return true
 }
 
 // ------------------------------------------------------------ 트레이

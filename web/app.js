@@ -74,6 +74,27 @@ function toast(msg, kind = '') {
   setTimeout(() => el.remove(), kind === 'err' ? 7000 : 3500);
 }
 
+// copyText 는 글을 클립보드에 넣는다. 클릭 처리 안에서 기다리기(await) 전에 불러야 한다 (WKWebView 는 사용자 동작 중에만 복사된다).
+// 전용 창(WKWebView·WebView2)과 브라우저 모두에서 되는 execCommand 를 먼저 쓰고, 안 되면 Clipboard API.
+function copyText(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+  const prev = document.activeElement;
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch (e) { /* 아래 Clipboard API 로 */ }
+  ta.remove();
+  prev?.focus?.();
+  if (ok) return Promise.resolve();
+  return navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('clipboard'));
+}
+
 // modal 은 버튼을 누르면 { action, form } 으로 끝나는 Promise 를 돌려준다. 바깥을 누르거나 Esc 면 action=null.
 function modal({ title, body = '', actions = [{ label: t('확인'), kind: 'primary', value: 'ok' }], onOpen }) {
   return new Promise((resolve) => {
@@ -960,7 +981,7 @@ function renderNoticePanel() {
           <div>
             <div class="tt">${esc(n.title)}</div>
             ${n.body ? `<div class="bd">${esc(n.body)}</div>` : ''}
-            <div class="meta" title="${esc(fullTime(n.time))}">${esc(ago(n.time))}${n.count > 1 ? ` · ${t('{n}번', { n: n.count })}` : ''}</div>
+            <div class="meta" title="${esc(fullTime(n.time))}">${esc(ago(n.time))}${n.count > 1 ? ` · ${t('{n}번', { n: n.count })}` : ''}${S.nt.copied === n.id ? ` · <span class="copied">${t('복사했습니다')}</span>` : ''}</div>
           </div>
           <div class="acts">
             <button class="icon-btn small" data-action="notice-toggle-read" data-id="${esc(n.id)}" title="${esc(n.read ? t('안 읽음으로 표시') : t('읽음으로 표시'))}"><span class="unread-dot"></span></button>
@@ -1364,9 +1385,22 @@ const actions = {
   },
   async 'notice-open'(b) {
     const id = b.dataset.id;
+    const sel = getSelection();
+    if (sel && !sel.isCollapsed && b.contains(sel.anchorNode)) return; // 글자를 끌어서 일부만 골랐으면 그대로 둔다 (⌘C·Ctrl+C 로 복사)
+    const n = S.nt.items.find((x) => x.id === id);
+    if (n) { // 누르면 제목·내용·시각을 복사하고, 그 항목 시각 옆에 잠깐 '복사했습니다' (토스트는 패널 머리 버튼을 가린다)
+      copyText([n.title, n.body, fullTime(n.time)].filter(Boolean).join('\n')).then(() => {
+        S.nt.copied = id;
+        renderNoticePanel();
+        clearTimeout(S.nt.copiedTimer);
+        S.nt.copiedTimer = setTimeout(() => {
+          S.nt.copied = null;
+          if (getSelection().isCollapsed) renderNoticePanel(); // 그새 글자를 고르고 있으면 다시 그리지 않는다
+        }, 1500);
+      }, () => toast(t('복사하지 못했습니다.'), 'err'));
+    }
     if (S.nt.opened.has(id)) S.nt.opened.delete(id);
     else S.nt.opened.add(id);
-    const n = S.nt.items.find((x) => x.id === id);
     if (n && !n.read) await noticeCall('/api/notices/read', { ids: [id], read: true });
     else renderNoticePanel();
   },

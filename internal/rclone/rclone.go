@@ -56,8 +56,13 @@ func New() *Client {
 	return &Client{Exe: platform.Executable(), Prefix: []string{"rclone"}, Config: store.RcloneConfig()}
 }
 
+// connectTimeout 은 연결 하나(TCP 연결·TLS 악수)를 기다리는 시간이다. rclone 기본값 1분은 Cat 같은 짧은 명령의
+// 시간 제한(1분)과 같아서, 로그인 직후 잠깐 생겼다 사라지는 경로로 나간 연결이 막히면 다시 시도할 틈 없이 시간 초과로 끝난다.
+// 15초에 끊으면 rclone 이 새 연결로 다시 시도한다 (docs/lessons.md '로그인 직후 막힌 연결').
+const connectTimeout = "15s"
+
 func (c *Client) command(ctx context.Context, args ...string) *exec.Cmd {
-	full := append(append([]string{}, c.Prefix...), "--config", c.Config, "--ask-password=false")
+	full := append(append([]string{}, c.Prefix...), "--config", c.Config, "--ask-password=false", "--contimeout", connectTimeout)
 	full = append(full, args...)
 	cmd := exec.CommandContext(ctx, c.Exe, full...)
 	platform.HideWindow(cmd)

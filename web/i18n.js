@@ -213,6 +213,8 @@ const EN = {
   "전체": "All",
   "안 읽음": "Unread",
   "{n}번": "×{n}",
+  "복사했습니다": "Copied",
+  "복사하지 못했습니다.": "Couldn't copy.",
   "안 읽음으로 표시": "Mark as unread",
   "읽음으로 표시": "Mark as read",
   "지우기": "Delete",

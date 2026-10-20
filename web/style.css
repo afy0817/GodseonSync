@@ -436,6 +436,7 @@ pre.log {
 }
 .np-item.open .bd { display: block; -webkit-line-clamp: unset; }
 .np-item .meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.np-item .meta .copied { color: var(--ok); }
 .np-item .acts { display: flex; gap: 0; opacity: .55; }
 .np-item:hover .acts { opacity: 1; }
 .np-item .unread-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--accent); }
