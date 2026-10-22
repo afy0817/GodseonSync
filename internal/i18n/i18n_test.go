@@ -12,11 +12,11 @@ import (
 func TestTranslate(t *testing.T) {
 	t.Cleanup(func() { SetLang(Korean) })
 	SetLang(English)
-	if T("[%s] 완료", "문서") != "[문서] Done" || T("표에 없는 말") != "표에 없는 말" {
-		t.Fatalf("영어: %q / %q", T("[%s] 완료", "문서"), T("표에 없는 말"))
+	if T("[%s] 동기화 실패", "문서") != "[문서] Sync failed" || T("표에 없는 말") != "표에 없는 말" {
+		t.Fatalf("영어: %q / %q", T("[%s] 동기화 실패", "문서"), T("표에 없는 말"))
 	}
 	SetLang("fr")
-	if Lang() != Korean || T("[%s] 완료", "x") != "[x] 완료" {
+	if Lang() != Korean || T("[%s] 동기화 실패", "x") != "[x] 동기화 실패" {
 		t.Fatal("모르는 언어는 한국어")
 	}
 	e := Error("다른 동기화가 실행 중입니다")
@@ -27,12 +27,12 @@ func TestTranslate(t *testing.T) {
 }
 
 var (
-	msgCall = regexp.MustCompile(`(?:i18n\.T|i18n\.Error|store\.Log|[^\w.]Log|[^\w.]fail\(http\.\w+,)\s*\(?\s*("(?:[^"\\]|\\.)*")`)
+	msgCall = regexp.MustCompile(`(?:i18n\.T|i18n\.Error|\.Log|\.Both|[^\w.]Log|[^\w.]fail\(http\.\w+,)\s*\(?\s*("(?:[^"\\]|\\.)*")`)
 	hangul  = regexp.MustCompile(`[가-힣]`)
 	verb    = regexp.MustCompile(`%(?:\[\d+\])?[-+# 0]*\d*(?:\.\d+)?[a-zA-Z]`)
 )
 
-// 사용자에게 보이는 문구(i18n.T·i18n.Error·store.Log·서버 fail)에는 모두 영어 번역이 있고, 형식 지정자가 같아야 한다.
+// 사용자에게 보이는 문구(i18n.T·i18n.Error·store.Log·폴더 로그 Log·Both·서버 fail)에는 모두 영어 번역이 있고, 형식 지정자가 같아야 한다.
 func TestAllMessagesTranslated(t *testing.T) {
 	root := filepath.Join("..")
 	n := 0

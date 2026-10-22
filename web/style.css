@@ -234,9 +234,25 @@ details.sub > summary::-webkit-details-marker { display: none; }
 .notice ul { margin: 4px 0 0; padding-left: 18px; }
 
 pre.log {
-  margin: 0; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+  margin: 0; max-height: max(360px, calc(100vh - 330px)); overflow: auto; white-space: pre-wrap; word-break: break-all;
   background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.55;
 }
+pre.log .ts, pre.log .muted { color: var(--muted); }
+pre.log .day { color: var(--muted); font-weight: 650; }
+pre.log .tag { color: var(--accent); }
+pre.log .start { font-weight: 650; }
+pre.log .ok { color: var(--ok); }
+pre.log .warn { color: var(--warn); }
+pre.log .err { color: var(--err); font-weight: 650; }
+pre.log .del { color: var(--err); }
+pre.log .sub { font-weight: 400; }
+.log-picker { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.log-picker button {
+  border: none; background: none; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.log-picker button:hover { color: var(--text); background: var(--surface-2); }
+.log-picker button.active { background: var(--accent-soft); color: var(--accent); }
 
 /* ---------- 처음 설정 ---------- */
 

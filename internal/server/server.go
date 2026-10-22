@@ -497,19 +497,40 @@ func (s *Server) driveLs(r *http.Request) (any, error) {
 	return map[string]any{"path": p, "exists": found, "dirs": out}, nil
 }
 
+// log 는 로그 마지막 줄들이다. folder 가 있으면 그 폴더 로그, 없으면 전체 로그.
+// folders 는 폴더 로그가 있는 폴더 ID 들이다 (설정에서 빠졌지만 로그가 남은 폴더도 고를 수 있게).
 func (s *Server) log(r *http.Request) (any, error) {
-	n, _ := strconv.Atoi(r.URL.Query().Get("lines"))
+	q := r.URL.Query()
+	n, _ := strconv.Atoi(q.Get("lines"))
 	if n < 10 || n > 3000 {
 		n = 300
 	}
-	return map[string]any{"text": store.LogTail(n), "path": store.LogFile()}, nil
+	id, path := q.Get("folder"), store.LogFile()
+	if id != "" {
+		if path = store.FolderLogFile(id); path == "" {
+			return nil, fail(http.StatusBadRequest, "%v", store.ErrBadFolder)
+		}
+	}
+	return map[string]any{"text": store.LogTail(id, n), "path": path, "folders": store.FolderLogIDs()}, nil
 }
 
+// clearLog 는 로그를 지운다. body: {folder} — 있으면 그 폴더 로그만, 없으면 전체 로그와 폴더 로그 모두.
 func (s *Server) clearLog(r *http.Request) (any, error) {
-	if err := store.ClearLog(i18n.T("설정 화면")); err != nil {
+	var body struct {
+		Folder string `json:"folder"`
+	}
+	if err := decode(r, &body); err != nil {
 		return nil, err
 	}
-	return map[string]any{"text": store.LogTail(300)}, nil
+	by := i18n.T("설정 화면")
+	if body.Folder != "" {
+		if err := store.ClearFolderLog(body.Folder, by); err != nil {
+			return nil, fail(http.StatusBadRequest, "%v", err)
+		}
+	} else if err := store.ClearLog(by); err != nil {
+		return nil, err
+	}
+	return map[string]any{"text": store.LogTail(body.Folder, 300)}, nil
 }
 
 // ------------------------------------------------------------ 처음 설정

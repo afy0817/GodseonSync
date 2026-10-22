@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -246,22 +247,42 @@ func LoadStatus() *Status {
 func SaveStatus(st *Status) error { return WriteJSON(StatusFile(), st) }
 
 // ---------------------------------------------------------------- 로그
+//
+// 로그는 두 가지다.
+//   - 전체 로그(godseonsync.log): 시작·종료, 설정·연결, 폴더마다 동기화 결과 한 줄 ([폴더 이름] 을 붙인다)
+//   - 폴더 로그(logs/<폴더 ID>.log): 그 폴더의 동기화 시작, 오간 파일, 결과
+//
+// 줄 앞의 기호(▶ 시작, ✓ 성공, ✗ 실패·오류, ⚠ 확인 필요, ↑ 올림, ↓ 받음, − 지움)는 언어와 상관없이 같아서
+// 설정 화면이 이걸로 색을 입힌다.
 
 var logMu sync.Mutex
 
 // Echo 가 참이면 로그를 표준 출력에도 찍는다 (명령줄에서 sync 를 돌릴 때).
 var Echo = false
 
-// Log 는 로그 파일에 한 줄 남긴다.
-func Log(format string, args ...any) {
-	line := time.Now().Format("2006-01-02 15:04:05") + " " + i18n.T(format, args...) // 문구는 이 PC 언어로
-	logMu.Lock()
-	defer logMu.Unlock()
-	if Echo {
-		fmt.Println(line)
+const (
+	logMax       = 5_000_000 // 전체 로그가 이보다 커지면 .1 로 돌린다
+	folderLogMax = 1_000_000 // 폴더 로그 하나
+)
+
+// LogsDir 는 폴더 로그를 두는 곳이다.
+func LogsDir() string { return path("logs") }
+
+var folderLogID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// FolderLogFile 은 폴더 로그 파일 경로다. ID 가 파일 이름으로 쓸 수 없는 값이면 빈 값.
+func FolderLogFile(id string) string {
+	if !folderLogID.MatchString(id) {
+		return ""
 	}
-	f := LogFile()
-	if st, err := os.Stat(f); err == nil && st.Size() > 5_000_000 {
+	return filepath.Join(LogsDir(), id+".log")
+}
+
+func stamp() string { return time.Now().Format("2006-01-02 15:04:05") + " " }
+
+// appendLog 는 파일에 한 줄 더한다. 파일이 max 보다 크면 먼저 .1 로 돌린다. logMu 를 잡고 부른다.
+func appendLog(f string, max int64, line string) {
+	if st, err := os.Stat(f); err == nil && st.Size() > max {
 		_ = os.Rename(f, f+".1")
 	}
 	fh, err := os.OpenFile(f, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
@@ -272,12 +293,53 @@ func Log(format string, args ...any) {
 	_, _ = fh.WriteString(line + "\n")
 }
 
-// ClearLog 는 로그 파일(과 예전 로그 .1)을 비운다.
+// Log 는 전체 로그에 한 줄 남긴다.
+func Log(format string, args ...any) {
+	line := stamp() + i18n.T(format, args...) // 문구는 이 PC 언어로
+	logMu.Lock()
+	defer logMu.Unlock()
+	if Echo {
+		fmt.Println(line)
+	}
+	appendLog(LogFile(), logMax, line)
+}
+
+// FolderLog 는 폴더 하나의 로그다 (logs/<ID>.log).
+type FolderLog struct{ ID, Name string }
+
+// Log 는 폴더 로그에만 한 줄 남긴다 (오간 파일처럼 그 폴더를 볼 때만 필요한 줄).
+func (l FolderLog) Log(format string, args ...any) { l.write(false, i18n.T(format, args...)) }
+
+// Both 는 폴더 로그와 전체 로그(앞에 [폴더 이름])에 같이 남긴다 (결과·실패처럼 전체 흐름에서도 봐야 하는 줄).
+func (l FolderLog) Both(format string, args ...any) { l.write(true, i18n.T(format, args...)) }
+
+func (l FolderLog) write(both bool, msg string) {
+	ts := stamp()
+	logMu.Lock()
+	defer logMu.Unlock()
+	if Echo {
+		fmt.Println(ts + "[" + l.Name + "] " + msg)
+	}
+	if f := FolderLogFile(l.ID); f != "" && os.MkdirAll(LogsDir(), 0o755) == nil {
+		appendLog(f, folderLogMax, ts+msg)
+	} else {
+		both = true // 폴더 로그를 못 쓰면 전체 로그에라도 남긴다
+	}
+	if both {
+		appendLog(LogFile(), logMax, ts+"["+l.Name+"] "+msg)
+	}
+}
+
+// ClearLog 는 전체 로그와 폴더 로그를 모두 비운다 (돌려 둔 .1 까지).
 func ClearLog(by string) error {
 	logMu.Lock()
 	f := LogFile()
 	_ = os.Remove(f + ".1")
 	err := os.WriteFile(f, nil, 0o644)
+	for _, id := range folderLogIDs() {
+		_ = os.Remove(filepath.Join(LogsDir(), id+".log"))
+		_ = os.Remove(filepath.Join(LogsDir(), id+".log.1"))
+	}
 	logMu.Unlock()
 	if err != nil {
 		return err
@@ -286,22 +348,100 @@ func ClearLog(by string) error {
 	return nil
 }
 
-// LogTail 은 로그 마지막 n 줄이다.
-func LogTail(n int) string {
-	f, err := os.Open(LogFile())
+// ClearFolderLog 는 폴더 로그 하나를 비운다.
+func ClearFolderLog(id, by string) error {
+	f := FolderLogFile(id)
+	if f == "" {
+		return ErrBadFolder
+	}
+	logMu.Lock()
+	_ = os.Remove(f + ".1")
+	err := os.Remove(f)
+	logMu.Unlock()
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	FolderLog{ID: id}.Log("로그를 지웠습니다 (%s)", by)
+	return nil
+}
+
+// ErrBadFolder 는 폴더 로그를 찾을 수 없는 폴더 ID 라는 뜻이다.
+var ErrBadFolder = i18n.Error("알 수 없는 폴더입니다")
+
+// folderLogIDs 는 폴더 로그가 있는 폴더 ID 들이다.
+func folderLogIDs() []string {
+	ents, _ := os.ReadDir(LogsDir())
+	var ids []string
+	for _, e := range ents {
+		if id, ok := strings.CutSuffix(e.Name(), ".log"); ok && folderLogID.MatchString(id) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// FolderLogIDs 는 폴더 로그가 있는 폴더 ID 들이다 (설정에서 빠진 폴더도 로그가 남아 있으면 나온다).
+func FolderLogIDs() []string {
+	logMu.Lock()
+	defer logMu.Unlock()
+	return folderLogIDs()
+}
+
+// PruneFolderLogs 는 keep 에 없는 폴더(설정에서 빠진 폴더)의 로그를 지운다.
+func PruneFolderLogs(keep map[string]bool) {
+	logMu.Lock()
+	defer logMu.Unlock()
+	ents, _ := os.ReadDir(LogsDir())
+	for _, e := range ents {
+		id, _, _ := strings.Cut(e.Name(), ".log")
+		if folderLogID.MatchString(id) && !keep[id] {
+			_ = os.Remove(filepath.Join(LogsDir(), e.Name()))
+		}
+	}
+}
+
+// LogTail 은 로그 마지막 n 줄이다. id 가 있으면 그 폴더 로그. 지금 파일이 짧으면 돌려 둔 .1 의 끝부분을 앞에 붙인다.
+func LogTail(id string, n int) string {
+	f := LogFile()
+	if id != "" {
+		if f = FolderLogFile(id); f == "" {
+			return ""
+		}
+	}
+	logMu.Lock()
+	defer logMu.Unlock()
+	lines := tailLines(f, n)
+	if len(lines) < n {
+		lines = append(tailLines(f+".1", n-len(lines)), lines...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// tailLines 는 파일 끝 n 줄이다 (끝 400KB 만 읽는다).
+func tailLines(p string, n int) []string {
+	f, err := os.Open(p)
 	if err != nil {
-		return ""
+		return nil
 	}
 	defer f.Close()
+	cut := false
 	if st, err := f.Stat(); err == nil && st.Size() > 400_000 {
 		_, _ = f.Seek(st.Size()-400_000, io.SeekStart)
+		cut = true
 	}
 	data, _ := io.ReadAll(f)
-	lines := strings.Split(strings.TrimRight(string(bytes.ToValidUTF8(data, []byte("?"))), "\n"), "\n")
+	text := strings.TrimRight(string(bytes.ToValidUTF8(data, []byte("?"))), "\n")
+	if text == "" {
+		return nil
+	}
+	lines := strings.Split(text, "\n")
+	if cut && len(lines) > 1 {
+		lines = lines[1:] // 중간에서 잘린 첫 줄
+	}
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 // ---------------------------------------------------------------- 잠금

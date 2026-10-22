@@ -155,7 +155,7 @@ func Run(opt Options) (Result, error) {
 	}()
 	res, err := run(ctx, s, lock, opt)
 	if err != nil {
-		store.Log("동기화 중단: %v", err)
+		store.Log("✗ 동기화 중단: %v", err)
 		store.AddNotice("err", i18n.T("동기화가 중단됐습니다"), err.Error())
 		st := store.LoadStatus()
 		st.LastRun, st.LastError = store.Now(), err.Error()
@@ -191,7 +191,7 @@ func run(ctx context.Context, s store.Settings, lock *store.Lock, opt Options) (
 			continue // 이 PC 에서는 동기화하지 않는 폴더
 		}
 		if ctx.Err() != nil {
-			store.Log("[%s] GodseonSync 를 끄는 중이라 건너뜀", f.Name)
+			store.FolderLog{ID: f.ID, Name: f.Name}.Both("GodseonSync 를 끄는 중이라 건너뜀")
 			continue
 		}
 		fst := st.Folders[f.ID]
@@ -218,6 +218,7 @@ func run(ctx context.Context, s store.Settings, lock *store.Lock, opt Options) (
 			delete(st.Folders, id)
 		}
 	}
+	store.PruneFolderLogs(known)
 	st.LastRun = store.Now()
 	_ = store.SaveStatus(st)
 	if !opt.DryRun {
@@ -228,15 +229,36 @@ func run(ctx context.Context, s store.Settings, lock *store.Lock, opt Options) (
 
 var errorPrefix = regexp.MustCompile(`^\s*ERROR\s*:\s*`)
 
+// 원인을 알려 주지 않는 bisync 마무리 오류 줄 (원인은 그 앞 오류 줄에 있다)
+var wrapUpError = regexp.MustCompile(`^(Bisync critical error: <nil>|Bisync aborted\. Error is retryable|There were errors while building listings|Failed to bisync)`)
+
+// failCause 는 rclone 출력에서 실패 원인 줄을 고른다: 마무리 줄을 뺀 첫 오류 줄, 그런 줄이 없으면 마지막 오류 줄.
+func failCause(tail []string) string {
+	last := ""
+	for _, l := range tail {
+		if !strings.Contains(l, "ERROR") {
+			continue
+		}
+		if l = errorPrefix.ReplaceAllString(l, ""); !wrapUpError.MatchString(l) {
+			return l
+		}
+		last = l
+	}
+	return last
+}
+
 func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg *config.Config, f *config.Folder, raw string,
 	fst *store.FolderStatus, opt Options) bool {
 	name := f.Name
+	lg := store.FolderLog{ID: f.ID, Name: name}
+	started := time.Now()
 	local := platform.ExpandPath(raw)
 	remote := drive.Spec(f.DrivePath)
+	sw := storeWord(drive)
 	now := store.Now()
 	fst.LastRun = now
 	fail := func(msg string) bool {
-		store.Log("[%s] 실패: %s", name, msg)
+		lg.Both("✗ 실패: %s", msg)
 		if !opt.DryRun {
 			fst.LastError, fst.LastErrorAt = msg, now
 			fst.Interrupted, fst.TooManyDeletes = false, false
@@ -288,7 +310,7 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 	sig := folderSig(target, local, remote, filters, cfg.Epoch)
 	needResync := opt.Resync || fst.NeedsResync || !fst.Initialized || fst.Sig != sig
 	if wasInterrupted(fst) && !opt.DryRun {
-		cleanPartials(name, target, remote, drive)
+		cleanPartials(lg, target, remote, drive)
 	}
 	modeFlags := storage.SyncFlags(drive.RC, drive.Remote) // 구글 드라이브면 --drive-skip-gdocs
 	choice := ""
@@ -309,8 +331,8 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 			if nl > 0 && nd > 0 {
 				diff := compareFiles(lf, rf)
 				if !sameFiles(diff) {
-					store.Log("[%s] 이 PC 와 드라이브가 달라 멈췄습니다 (이 PC 에만 %d개, 드라이브에만 %d개, 내용이 다른 파일 %d개). 설정 화면에서 어느 쪽으로 맞출지 고르세요.",
-						name, diff.OnlyLocal, diff.OnlyDrive, diff.Different)
+					lg.Both("⚠ 이 PC 와 드라이브가 달라 멈췄습니다 (이 PC 에만 %d개, 드라이브에만 %d개, 내용이 다른 파일 %d개). 설정 화면에서 어느 쪽으로 맞출지 고르세요.",
+						diff.OnlyLocal, diff.OnlyDrive, diff.Different)
 					if !opt.DryRun {
 						fst.NeedsChoice, fst.LocalFiles, fst.DriveFiles, fst.Diff = true, nl, nd, &diff
 						fst.LastError, fst.LastErrorAt = "", ""
@@ -319,7 +341,7 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 					}
 					return true
 				}
-				store.Log("[%s] 이 PC 와 드라이브의 파일이 같아(%d개) 묻지 않고 합칩니다", name, nl)
+				lg.Log("이 PC 와 드라이브의 파일이 같아(%d개) 묻지 않고 합칩니다", nl)
 			}
 			choice = store.ChoiceMerge // 한쪽이 비었거나 양쪽이 같다: 고를 것 없이 합친다
 			if !opt.DryRun {
@@ -331,9 +353,9 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 			fst.NeedsChoice = false // 골랐다 (또는 한쪽이 비어 고를 필요가 없다)
 		}
 		if (choice == store.ChoiceDrive || choice == store.ChoiceLocal) && !opt.DryRun {
-			if err := overwrite(ctx, drive, name, choice, local, remote, ffile, modeFlags); err != nil {
+			if err := overwrite(ctx, drive, lg, sw, choice, local, remote, ffile, modeFlags); err != nil {
 				if ctx.Err() != nil {
-					store.Log("[%s] GodseonSync 를 끄느라 덮어쓰기를 멈췄습니다. 다음 동기화 때 다시 합니다 (백업은 남아 있습니다).", name)
+					lg.Both("⚠ GodseonSync 를 끄느라 덮어쓰기를 멈췄습니다. 다음 동기화 때 다시 합니다 (백업은 남아 있습니다).")
 					fst.LastError, fst.LastErrorAt, fst.Interrupted = i18n.T("중간에 멈춤 — 다음 동기화 때 다시 덮어씁니다"), now, true
 					return false
 				}
@@ -379,9 +401,11 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 	if opt.Force {
 		note += " (--force)"
 	}
-	store.Log("[%s] %s <-> %s%s", name, local, remote, note)
+	lg.Log("▶ 동기화 시작%s: %s ↔ %s", note, local, remote)
 
-	var tail []string
+	_, rpath, _ := strings.Cut(remote, ":")
+	p := newRcloneLog(lg, sw, opt.DryRun, target, local, rpath)
+	var tail []string // rclone 이 낸 그대로의 마지막 40줄 (실패 원인 찾기)
 	code, err := drive.RC.Stream(ctx, func(line string) {
 		line = rclone.StripTimestamp(line)
 		if strings.TrimSpace(line) == "" {
@@ -391,12 +415,12 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 		if len(tail) > 40 {
 			tail = tail[len(tail)-40:]
 		}
-		store.Log("[%s]   %s", name, line)
+		p.line(line)
 	}, args...)
 	if ctx.Err() != nil {
 		// 끄느라 멈췄다. 기록(합치기 완료 여부)은 그대로 두고 다음 동기화 때 이어서 한다.
 		// 실행 직전에 멈추면 err(context canceled)도 오므로 err 보다 먼저 본다.
-		store.Log("[%s] GodseonSync 를 끄느라 중간에 멈췄습니다. 다음 동기화 때 이어서 합니다.", name)
+		lg.Both("⚠ GodseonSync 를 끄느라 중간에 멈췄습니다. 다음 동기화 때 이어서 합니다.")
 		if !opt.DryRun {
 			fst.LastError, fst.LastErrorAt, fst.Interrupted = i18n.T("중간에 멈춤 — 다음 동기화 때 이어서 합니다"), now, true
 		}
@@ -406,7 +430,11 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 		return fail(i18n.T("rclone 을 실행할 수 없습니다: %v", err))
 	}
 	if opt.DryRun {
-		store.Log("[%s] 미리보기 끝 (종료 코드 %d)", name, code)
+		if code == 0 {
+			lg.Both("✓ 미리보기 끝 (%s): %s — 실제로는 바꾸지 않았습니다", took(started), p.summary())
+		} else {
+			lg.Both("✗ 미리보기 실패 (종료 코드 %d)", code)
+		}
 		return code == 0
 	}
 	if code == 0 {
@@ -417,16 +445,17 @@ func syncFolder(ctx context.Context, drive *config.Drive, s store.Settings, cfg 
 		if hadError {
 			store.AddNotice("ok", i18n.T("[%s] 다시 정상으로 동기화했습니다", name), "")
 		}
-		store.Log("[%s] 완료", name)
+		if needResync {
+			lg.Both("✓ 합치기 완료 (%s): %s", took(started), p.summary())
+		} else {
+			lg.Both("✓ 완료 (%s): %s", took(started), p.summary())
+		}
 		return true
 	}
 	text := strings.Join(tail, "\n")
 	msg := i18n.T("종료 코드 %d", code)
-	for i := len(tail) - 1; i >= 0; i-- {
-		if strings.Contains(tail[i], "ERROR") {
-			msg = errorPrefix.ReplaceAllString(tail[i], "")
-			break
-		}
+	if cause := failCause(tail); cause != "" {
+		msg = cause
 	}
 	switch {
 	case strings.Contains(text, "Must run --resync"):
@@ -451,20 +480,19 @@ func BackupSuffix(t time.Time) string { return "_backup_" + t.Format("2006010215
 // 덮어쓰기 전에 덮어쓸 쪽을 제외 규칙 없이 통째로 옆에 `<이름>_backup_<년월일시분초>` 로 복사해 둔다.
 //   - drive: 드라이브 → 이 PC. 이 PC 폴더를 `<이 PC 경로>_backup_…` 로 복사한 뒤 드라이브 내용으로 맞춘다.
 //   - local: 이 PC → 드라이브. 드라이브 폴더를 `<드라이브 경로>_backup_…` 로 복사한 뒤(드라이브 안에서 복사) 이 PC 내용으로 맞춘다.
-func overwrite(ctx context.Context, drive *config.Drive, name, choice, local, remote, ffile string, modeFlags []string) error {
-	suffix := BackupSuffix(time.Now())
+func overwrite(ctx context.Context, drive *config.Drive, lg store.FolderLog, sw, choice, local, remote, ffile string, modeFlags []string) error {
+	started := time.Now()
+	suffix := BackupSuffix(started)
 	from, to, backup := remote, local, local+suffix
 	toLabel := i18n.T("이 PC 폴더")
+	dir := toLocal
 	if choice == store.ChoiceLocal {
 		from, to, backup = local, remote, remote+suffix
 		toLabel = i18n.T("드라이브 폴더")
+		dir = toRemote
 	}
-	run := func(what string, args ...string) error {
-		code, err := drive.RC.Stream(ctx, func(line string) {
-			if line = strings.TrimSpace(rclone.StripTimestamp(line)); line != "" {
-				store.Log("[%s]   %s", name, line)
-			}
-		}, args...)
+	run := func(what string, p *rcloneLog, args ...string) error {
+		code, err := drive.RC.Stream(ctx, func(line string) { p.line(rclone.StripTimestamp(line)) }, args...)
 		switch {
 		case err != nil:
 			return fmt.Errorf(i18n.T("%s: rclone 을 실행할 수 없습니다: %v"), what, err)
@@ -479,27 +507,52 @@ func overwrite(ctx context.Context, drive *config.Drive, name, choice, local, re
 	if runtime.GOOS == "darwin" {
 		common = append(common, "--local-unicode-normalization")
 	}
-	store.Log("[%s] 덮어쓰기 전에 %s를 백업합니다: %s", name, toLabel, backup)
-	if err := run(i18n.T("%s 백업", toLabel), append([]string{"copy", to, backup}, common...)...); err != nil {
+	lg.Both("▶ 덮어쓰기 전에 %s를 백업합니다: %s", toLabel, backup)
+	bp := newRcloneLog(lg, sw, false)
+	bp.quiet = true // 백업은 파일마다 남기지 않고 개수만
+	if err := run(i18n.T("%s 백업", toLabel), bp, append([]string{"copy", to, backup}, common...)...); err != nil {
 		return err
 	}
-	store.Log("[%s] %s → %s 로 덮어씁니다", name, from, to)
-	if err := run(i18n.T("덮어쓰기"), append([]string{"sync", from, to, "--filter-from", ffile}, common...)...); err != nil {
+	lg.Log("  백업 끝: %d개", bp.n.copied)
+	lg.Log("▶ %s → %s 로 덮어씁니다", from, to)
+	sp := newRcloneLog(lg, sw, false)
+	sp.dir = dir
+	if err := run(i18n.T("덮어쓰기"), sp, append([]string{"sync", from, to, "--filter-from", ffile}, common...)...); err != nil {
 		return errors.New(i18n.T("%s (백업: %s)", err.Error(), backup))
 	}
-	store.Log("[%s] 덮어쓰기 끝. 백업: %s", name, backup)
-	store.AddNotice("ok", i18n.T("[%s] 덮어쓰기를 마쳤습니다", name), i18n.T("%s → %s. 덮어쓰기 전 내용은 %s 에 백업했습니다.", from, to, backup))
+	lg.Both("✓ 덮어쓰기 끝 (%s): %s. 백업: %s", took(started), sp.summary(), backup)
+	store.AddNotice("ok", i18n.T("[%s] 덮어쓰기를 마쳤습니다", lg.Name), i18n.T("%s → %s. 덮어쓰기 전 내용은 %s 에 백업했습니다.", from, to, backup))
 	return nil
 }
 
 // cleanPartials 는 지난번에 중간에 멈춘 동기화가 남긴 rclone 임시 파일(*.<16진수>.partial)만 양쪽에서 지운다.
-func cleanPartials(name, local, remote string, drive *config.Drive) {
+func cleanPartials(lg store.FolderLog, local, remote string, drive *config.Drive) {
 	for _, p := range []string{local, remote} {
 		if _, err := drive.RC.Run(10*time.Minute, nil, "delete", "--include", config.PartialPattern, p); err != nil {
-			store.Log("[%s] 남은 임시 파일 정리 실패 (%s): %v", name, p, err)
+			lg.Log("⚠ 남은 임시 파일 정리 실패 (%s): %v", p, err)
 		}
 	}
-	store.Log("[%s] 지난번에 멈춘 동기화가 남긴 임시 파일을 정리했습니다", name)
+	lg.Log("지난번에 멈춘 동기화가 남긴 임시 파일을 정리했습니다")
+}
+
+// storeWord 는 로그에서 저장소를 부르는 말이다 (구글 드라이브면 '드라이브', SFTP 면 'SFTP').
+func storeWord(d *config.Drive) string {
+	if m := storage.Of(d.RC, d.Remote); m != nil && m != storage.GoogleDrive {
+		return m.Label
+	}
+	return i18n.T("드라이브")
+}
+
+// took 는 since 부터 걸린 시간이다 (예: '6초', '1분 5초').
+func took(since time.Time) string {
+	s := int(time.Since(since).Round(time.Second) / time.Second)
+	switch {
+	case s < 60:
+		return i18n.T("%d초", s)
+	case s < 3600:
+		return i18n.T("%d분 %d초", s/60, s%60)
+	}
+	return i18n.T("%d시간 %d분", s/3600, s%3600/60)
 }
 
 // shortLink 는 데이터 폴더 안에 실제 폴더를 가리키는 짧은 링크를 만든다

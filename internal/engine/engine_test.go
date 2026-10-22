@@ -43,10 +43,10 @@ func (p pc) sync(t *testing.T, opt Options) Result {
 	p.use(t)
 	res, err := Run(opt)
 	if err != nil {
-		t.Fatalf("%s 동기화 오류: %v\n%s", p.id, err, store.LogTail(60))
+		t.Fatalf("%s 동기화 오류: %v\n%s", p.id, err, store.LogTail("", 60))
 	}
 	if len(res.Failed) > 0 {
-		t.Fatalf("%s 동기화 실패: %v\n%s", p.id, res.Failed, store.LogTail(60))
+		t.Fatalf("%s 동기화 실패: %v\n%s", p.id, res.Failed, store.LogTail("", 60))
 	}
 	return res
 }
@@ -410,7 +410,7 @@ func TestConcurrentEnsureMigratesOnce(t *testing.T) {
 			t.Fatalf("동시에 불러도 실패하면 안 됨: %v", err)
 		}
 	}
-	if n := strings.Count(store.LogTail(100), "예전 형식 설정"); n != 1 {
+	if n := strings.Count(store.LogTail("", 100), "예전 형식 설정"); n != 1 {
 		t.Fatalf("한 번만 옮겨야 함 (로그 %d 번)", n)
 	}
 }
@@ -592,10 +592,10 @@ func TestIdenticalBothSidesMergeWithoutAsking(t *testing.T) {
 	write(t, filepath.Join(other, "sub", norm.NFD.String("한글.txt")), "K", t0)
 	saveConfig(t, config.Folder{ID: "f-s", Name: "s", DrivePath: "GodseonSync/s", Paths: map[string]string{a.id: other}})
 	if res := a.sync(t, Options{}); len(res.NeedChoice) != 0 {
-		t.Fatalf("양쪽이 같으면 묻지 않아야 함: %+v\n%s", res, store.LogTail(20))
+		t.Fatalf("양쪽이 같으면 묻지 않아야 함: %+v\n%s", res, store.LogTail("", 20))
 	}
 	fst := store.LoadStatus().Folders["f-s"]
-	if fst.NeedsChoice || !fst.Initialized || !strings.Contains(store.LogTail(40), "같아") {
+	if fst.NeedsChoice || !fst.Initialized || !strings.Contains(store.LogTail("f-s", 40), "같아") {
 		t.Fatalf("같아서 합쳤다는 기록: %+v", fst)
 	}
 	if store.Choice("f-s") != "" || exists(filepath.Join(drive, "GodseonSync", "s_backup")) {

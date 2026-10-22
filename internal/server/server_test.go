@@ -401,9 +401,41 @@ func TestMigrateThenSyncResyncs(t *testing.T) {
 			t.Fatalf("새 폴더에 %s 가 다시 올라가야 함", name)
 		}
 	}
-	if !strings.Contains(store.LogTail(200), "--resync") && !strings.Contains(store.LogTail(200), "합치기") {
-		t.Log(store.LogTail(60))
+	if !strings.Contains(store.LogTail("", 200), "--resync") && !strings.Contains(store.LogTail("", 200), "합치기") {
+		t.Log(store.LogTail("", 60))
 		t.Fatal("옮긴 뒤 첫 동기화는 합치기여야 함")
+	}
+}
+
+// 로그 API: 전체·폴더 로그를 따로 읽고 지운다. 파일 이름으로 못 쓰는 폴더 ID 는 거절한다.
+func TestLogAPI(t *testing.T) {
+	home(t, "nodrive")
+	s := newServer()
+	store.Log("GodseonSync 시작 (설정 화면 포트 %d)", 9417)
+	store.FolderLog{ID: "f-1", Name: "문서"}.Both("✓ 완료 (%s): %s", "1초", "바뀐 파일 없음")
+	store.FolderLog{ID: "f-1", Name: "문서"}.Log("  ↑ 올림%s: %s", "", "a.txt")
+	_, all := call(t, s, "GET", "/api/log?lines=50", nil)
+	_, one := call(t, s, "GET", "/api/log?lines=50&folder=f-1", nil)
+	if txt := all["text"].(string); !strings.Contains(txt, "[문서] ✓ 완료") || strings.Contains(txt, "a.txt") {
+		t.Fatalf("전체 로그: %v", all)
+	}
+	if txt := one["text"].(string); !strings.Contains(txt, "a.txt") || strings.Contains(txt, "시작") || !strings.HasSuffix(one["path"].(string), filepath.Join("logs", "f-1.log")) {
+		t.Fatalf("폴더 로그: %v", one)
+	}
+	if fs, _ := all["folders"].([]any); len(fs) != 1 || fs[0] != "f-1" {
+		t.Fatalf("로그가 있는 폴더: %v", all["folders"])
+	}
+	if code, _ := call(t, s, "GET", "/api/log?folder=..%2Fsettings", nil); code != http.StatusBadRequest {
+		t.Fatal("이상한 폴더 ID 는 거절")
+	}
+	if code, out := call(t, s, "POST", "/api/log/clear", map[string]any{"folder": "f-1"}); code != http.StatusOK || strings.Contains(out["text"].(string), "a.txt") {
+		t.Fatalf("폴더 로그 지우기: %d %v", code, out)
+	}
+	if _, all = call(t, s, "GET", "/api/log", nil); !strings.Contains(all["text"].(string), "[문서] ✓ 완료") {
+		t.Fatal("폴더 로그를 지워도 전체 로그는 그대로")
+	}
+	if code, _ := call(t, s, "POST", "/api/log/clear", map[string]any{}); code != http.StatusOK || store.LogTail("f-1", 10) != "" || strings.Contains(store.LogTail("", 10), "시작") {
+		t.Fatal("전체 지우기는 폴더 로그까지")
 	}
 }
 

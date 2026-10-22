@@ -157,6 +157,8 @@ const S = {
   setup: { probe: null, probeError: '', name: '', adopt: '', autostart: true, busy: false },
   conn: { mode: '', values: {}, migrating: false }, // 저장소 연결 입력 칸 (처음 설정·설정 탭이 같이 쓴다). 보안 비밀은 서버가 돌려주지 않는다
   logText: '',
+  logFolder: loadPref('gs-log-folder', ''), // 설정 › 로그에서 보는 로그: '' 면 전체 로그, 아니면 폴더 ID
+  logFolders: [], // 폴더 로그가 있는 폴더 ID (/api/log — 설정에서 빠졌어도 로그가 남은 폴더)
   expanded: loadExpanded(), // 펼쳐 둔 폴더 ID (저장한 폴더는 기본으로 접힘)
   tab: loadTab(), // 지금 화면(왼쪽 메뉴): folders / pcs / settings
   settingsTab: loadPref('gs-settings-tab', 'general').replace(/^storage$/, 'mode'), // 설정 화면 안의 탭 (예전 이름 storage)
@@ -700,6 +702,7 @@ function renderFolder(f, i, clients) {
           <button class="btn small" data-action="sync-folder" data-id="${esc(f.id)}">${t('지금 동기화')}</button>
           <button class="btn small ghost" data-action="resync-folder" data-id="${esc(f.id)}" title="${esc(t('양쪽 파일을 합칩니다. 아무것도 지우지 않고, 같은 파일은 더 최신 것을 남깁니다.'))}">${t('합치기')}</button>
           <button class="btn small ghost" data-action="dryrun-folder" data-id="${esc(f.id)}" title="${esc(t('실제로 바꾸지 않고 바뀔 내용만 로그에 남깁니다.'))}">${t('미리보기')}</button>
+          <button class="btn small ghost" data-action="folder-log" data-id="${esc(f.id)}" title="${esc(t('이 폴더의 동기화 기록(오간 파일과 결과)을 봅니다.'))}">${t('로그')}</button>
           ${tooMany ? `<button class="btn small ghost danger" data-action="force-folder" data-id="${esc(f.id)}">${t('강제 실행')}</button>` : ''}` : ''}
         <button class="btn small ghost danger" data-action="remove-folder" data-f="${i}">${t('삭제')}</button>
       </div>
@@ -874,11 +877,18 @@ function renderSettingsTab(cfg) {
       </div>
     </section>`;
   } else {
+    const choices = logChoices();
+    if (S.logFolder && !choices.some((c) => c.id === S.logFolder)) S.logFolder = ''; // 지워진 폴더
+    const cur = choices.find((c) => c.id === S.logFolder);
+    const pick = (id, label) => `<button class="${S.logFolder === id ? 'active' : ''}" role="tab" aria-selected="${S.logFolder === id}" data-action="log-folder" data-id="${esc(id)}">${label}</button>`;
     body = `
     <section class="section">
-      <div class="section-head"><div><h2>${t('로그')}</h2></div>
+      <div class="section-head"><div><h2>${t('로그')}</h2>
+        <p>${cur ? t('{name} 폴더의 동기화 기록입니다. 오간 파일과 결과를 남깁니다.', { name: esc(cur.name) }) : t('GodseonSync 시작·종료, 설정 변경, 폴더마다 동기화 결과 한 줄을 남깁니다. 오간 파일은 폴더를 고르면 보입니다.')}</p></div>
         <div class="row"><button class="btn small ghost danger" data-action="clear-log">${t('로그 지우기')}</button><button class="btn small" data-action="refresh-log">${t('새로고침')}</button></div></div>
-      <pre class="log" id="log">${esc(S.logText) || `<span class="muted">${t('로그가 없습니다.')}</span>`}</pre>
+      <div class="log-picker" role="tablist" aria-label="${esc(t('볼 로그'))}">${pick('', t('전체'))}${choices.map((c) => pick(c.id, esc(c.name))).join('')}</div>
+      <pre class="log" id="log">${logHtml(S.logText)}</pre>
+      <p class="field-hint">${t('↑ 올림: 이 PC → {store} · ↓ 받음: {store} → 이 PC · − 지움 · ⚠ 확인 필요 · ✗ 실패', { store: storeWord() })}</p>
     </section>`;
   }
   return `
@@ -1116,16 +1126,64 @@ function updateFolderStatus() {
 }
 
 async function refreshLog() {
+  const folder = S.logFolder;
   try {
-    const r = await api('/api/log?lines=400');
+    const r = await api(`/api/log?lines=400${folder ? `&folder=${encodeURIComponent(folder)}` : ''}`);
+    if (folder !== S.logFolder) return; // 그새 다른 로그를 골랐다
+    const changed = (r.folders || []).join() !== S.logFolders.join();
     S.logText = r.text;
+    S.logFolders = r.folders || [];
     const log = $('#log');
-    if (log) {
+    if (log && changed && S.tab === 'settings' && S.settingsTab === 'log') {
+      render(); // 고를 수 있는 폴더가 바뀌었다
+    } else if (log) {
       const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-      log.textContent = r.text || t('로그가 없습니다.');
+      log.innerHTML = logHtml(r.text);
       if (atBottom) log.scrollTop = log.scrollHeight;
     }
   } catch (e) { /* 다음 번에 */ }
+}
+
+// logChoices 는 설정 › 로그에서 고를 수 있는 폴더다: 이 PC 에서 동기화하는 폴더와, 로그가 남은 폴더.
+function logChoices() {
+  const folders = S.remote?.config?.folders || S.draft?.folders || [];
+  const list = folders.filter((f) => f.id && ((f.paths || {})[me()] || S.logFolders.includes(f.id))).map((f) => ({ id: f.id, name: f.name || f.id }));
+  for (const id of S.logFolders) if (!list.some((c) => c.id === id)) list.push({ id, name: id }); // 설정에서 빠진 폴더
+  return list;
+}
+
+// showLog 는 설정 › 로그에서 그 폴더(빈 값이면 전체) 로그를 연다.
+function showLog(id) {
+  S.tab = 'settings';
+  S.settingsTab = 'log';
+  S.logFolder = id;
+  savePref('gs-tab', S.tab);
+  savePref('gs-settings-tab', S.settingsTab);
+  savePref('gs-log-folder', id);
+  S.logText = null; // 불러오는 중
+  render();
+  refreshLog();
+}
+
+// logHtml 은 로그에 색을 입힌다. 엔진이 줄 앞에 붙이는 기호(언어와 상관없음)로 나눈다:
+// ✗ 실패·오류, ⚠ 확인 필요, ✓ 성공, ▶ 시작, − 지움, … 진행 중. 날짜가 바뀌는 곳에만 날짜를 쓰고 줄마다 시각만 보여 준다.
+const LOG_LINE = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d) (?:(\[[^\]]*\]) )?(.*)$/;
+const LOG_KIND = [['✗', 'err'], ['⚠', 'warn'], ['✓', 'ok'], ['▶', 'start'], ['−', 'del'], ['…', 'muted']];
+
+function logHtml(text) {
+  if (text === null) return `<span class="muted">${t('불러오는 중')}…</span>`;
+  if (!text) return `<span class="muted">${t('로그가 없습니다.')}</span>`;
+  let day = '';
+  return text.split('\n').map((line) => {
+    const m = LOG_LINE.exec(line);
+    if (!m) return esc(line); // 여러 줄 메시지의 뒷줄
+    const [, d, time, tag, msg] = m;
+    const kind = (LOG_KIND.find(([sym]) => msg.trimStart().startsWith(sym)) || [])[1];
+    const head = d !== day ? `<span class="day">${esc(d)}</span>\n` : '';
+    day = d;
+    const cls = kind && (/^\s/.test(msg) ? `${kind} sub` : kind); // 들여쓴 줄은 rclone 이 낸 세부 줄
+    return `${head}<span class="ts">${time}</span> ${tag ? `<span class="tag">${esc(tag)}</span> ` : ''}${cls ? `<span class="${cls}">${esc(msg)}</span>` : esc(msg)}`;
+  }).join('\n');
 }
 
 // ---------------------------------------------------------------- 입력
@@ -1233,7 +1291,7 @@ const actions = {
   },
   async 'dryrun-folder'(b) {
     await startSync({ folders: [b.dataset.id], dry_run: true });
-    toast(t('미리보기 결과는 아래 로그에 나옵니다.'));
+    showLog(b.dataset.id); // 미리보기 결과는 그 폴더 로그에 나온다
   },
   async 'force-folder'(b) {
     if (await confirmBox(t('강제 실행'), t('한 번에 많은 파일이 지워져도 그대로 반영합니다. 다른 PC 와 {store}에서도 지워집니다. 일부러 지운 게 맞을 때만 실행하세요.', { store: storeWord() }), t('강제 실행'), true)) {
@@ -1339,12 +1397,23 @@ const actions = {
     render();
   },
   async 'clear-log'() {
-    if (!(await confirmBox(t('로그 지우기'), t('이 PC 의 GodseonSync 로그를 모두 지웁니다. 동기화 설정과 파일에는 영향이 없습니다.'), t('지우기'), true))) return;
-    const r = await api('/api/log/clear', {});
+    const cur = logChoices().find((c) => c.id === S.logFolder);
+    const text = cur
+      ? t("'{name}' 폴더의 로그를 지웁니다. 전체 로그와 동기화 설정·파일에는 영향이 없습니다.", { name: esc(cur.name) })
+      : t('이 PC 의 GodseonSync 로그를 폴더별 로그까지 모두 지웁니다. 동기화 설정과 파일에는 영향이 없습니다.');
+    if (!(await confirmBox(t('로그 지우기'), text, t('지우기'), true))) return;
+    const r = await api('/api/log/clear', cur ? { folder: cur.id } : {});
     S.logText = r.text;
     const log = $('#log');
-    if (log) log.textContent = r.text || t('로그가 없습니다.');
+    if (log) log.innerHTML = logHtml(r.text);
     toast(t('로그를 지웠습니다.'));
+    refreshLog();
+  },
+  'log-folder'(b) {
+    showLog(b.dataset.id);
+  },
+  'folder-log'(b) {
+    showLog(b.dataset.id);
   },
   async 'refresh-log'() {
     await refreshLog();

@@ -30,7 +30,7 @@ const usage = `GodseonSync — 여러 PC 의 폴더를 구글 드라이브를 �
         --resync    처음처럼 양쪽을 합침 (지우지 않음)
         --force     한 번에 많이 지워져도 멈추지 않음
   GodseonSync status             설정·마지막 결과 보기
-  GodseonSync log [-n 100]       최근 로그 보기 (--clear 로그 지우기)
+  GodseonSync log [-n 100]       최근 로그 보기 (--folder 이름: 그 폴더 로그, --clear 로그 지우기)
   GodseonSync autostart on|off   로그인할 때 자동 실행 켜기/끄기
   GodseonSync quit               실행 중인 GodseonSync 끝내기
   GodseonSync version            버전 보기
@@ -76,17 +76,30 @@ func Main(args []string) int {
 	case "log":
 		fs := flag.NewFlagSet("log", flag.ContinueOnError)
 		n := fs.Int("n", 100, i18n.T("줄 수"))
+		folder := fs.String("folder", "", i18n.T("이 폴더(이름 또는 ID)의 로그만"))
 		clear := fs.Bool("clear", false, i18n.T("로그 지우기"))
 		if err := fs.Parse(args); err != nil {
 			return 2
 		}
+		id := ""
+		if *folder != "" {
+			if id = logFolderID(*folder); id == "" {
+				err = fmt.Errorf(i18n.T("폴더를 찾을 수 없습니다: %s"), *folder)
+				break
+			}
+		}
 		if *clear {
-			if err = store.ClearLog(i18n.T("명령줄")); err == nil {
+			if id != "" {
+				err = store.ClearFolderLog(id, i18n.T("명령줄"))
+			} else {
+				err = store.ClearLog(i18n.T("명령줄"))
+			}
+			if err == nil {
 				fmt.Println(i18n.T("로그를 지웠습니다."))
 			}
 			break
 		}
-		fmt.Println(store.LogTail(*n))
+		fmt.Println(store.LogTail(id, *n))
 	case "autostart":
 		if len(args) != 1 || (args[0] != "on" && args[0] != "off") {
 			fmt.Fprintln(os.Stderr, i18n.T("사용법: GodseonSync autostart on|off"))
@@ -257,4 +270,21 @@ func runWindow() error {
 		}
 	}()
 	return window.Run(url)
+}
+
+// logFolderID 는 이름이나 ID 로 폴더 로그의 ID 를 찾는다 (이 PC 가 마지막으로 받은 설정, 남아 있는 폴더 로그에서).
+func logFolderID(name string) string {
+	if c := engine.CachedConfig(); c != nil {
+		for _, f := range c.Folders {
+			if f.ID == name || f.Name == name {
+				return f.ID
+			}
+		}
+	}
+	for _, id := range store.FolderLogIDs() {
+		if id == name {
+			return id
+		}
+	}
+	return ""
 }

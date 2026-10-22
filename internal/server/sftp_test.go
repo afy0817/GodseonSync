@@ -118,7 +118,7 @@ func TestMoveStorageToSFTP(t *testing.T) {
 		t.Fatalf("%d %v", code, out)
 	}
 	if snap := waitJob(t, s); snap["state"] != "done" {
-		t.Fatalf("바꿔야 함: %v\n%s", snap, store.LogTail(30))
+		t.Fatalf("바꿔야 함: %v\n%s", snap, store.LogTail("", 30))
 	}
 	nc := readSetting(t, filepath.Join(sftpDir, "GodseonSync", "setting.json"))
 	if nc.Epoch == "" || nc.Revision != 5 || len(nc.PCs) != 2 || len(nc.Folders) != 1 {
@@ -138,7 +138,7 @@ func TestMoveStorageToSFTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	if b, err := os.ReadFile(filepath.Join(sftpDir, "GodseonSync", "문서", "a.txt")); err != nil || string(b) != "A" {
-		t.Fatalf("SFTP 로 다시 올라가야 함: %v\n%s", err, store.LogTail(30))
+		t.Fatalf("SFTP 로 다시 올라가야 함: %v\n%s", err, store.LogTail("", 30))
 	}
 }
 
@@ -170,7 +170,7 @@ func TestRestoreSavedConnection(t *testing.T) {
 	// A → B (새로 연결)
 	call(t, s, "POST", "/api/connect", map[string]any{"mode": "sftp", "options": map[string]string{"host": "127.0.0.1", "port": portB, "user": "gs", "pass": "pw"}, "move": true})
 	if snap := waitJob(t, s); snap["state"] != "done" {
-		t.Fatalf("B 로 바꾸기: %v\n%s", snap, store.LogTail(20))
+		t.Fatalf("B 로 바꾸기: %v\n%s", snap, store.LogTail("", 20))
 	}
 	if o, _ := rc.RemoteOptions("gdrive"); o["port"] != portB {
 		t.Fatal("B 에 연결돼야 함")
@@ -189,7 +189,7 @@ func TestRestoreSavedConnection(t *testing.T) {
 		t.Fatalf("%d %v", code, out)
 	}
 	if snap := waitJob(t, s); snap["state"] != "done" {
-		t.Fatalf("A 로 돌아가기: %v\n%s", snap, store.LogTail(20))
+		t.Fatalf("A 로 돌아가기: %v\n%s", snap, store.LogTail("", 20))
 	}
 	if o, _ := rc.RemoteOptions("gdrive"); o["port"] != portA {
 		t.Fatal("A 에 다시 연결돼야 함")
