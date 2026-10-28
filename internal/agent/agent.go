@@ -122,7 +122,7 @@ func Run(opt Options) error {
 	})
 	go func() { _ = a.srv.Serve(l) }()
 	go a.scheduler()
-	if opt.OpenUI { // 로그인 자동 실행(--background)이면 처음 설정 전이라도 트레이에만 알린다
+	if opt.OpenUI { // 로그인 자동 실행('시작시 트레이에서 실행')이면 처음 설정 전이라도 트레이에만 알린다
 		a.OpenUI()
 	}
 	if opt.NoTray {

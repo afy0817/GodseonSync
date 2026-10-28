@@ -472,6 +472,27 @@ func TestLanguageSetting(t *testing.T) {
 	}
 }
 
+// 시작시 트레이에서 실행: 예전 설정 파일(칸 없음)은 켜짐, 끄면 끈 채로 남는다.
+func TestStartInTraySetting(t *testing.T) {
+	home(t, "nodrive")
+	if err := os.WriteFile(store.SettingsFile(), []byte(`{"client_id":"pc-a","rclone_remote":"nodrive","configured":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !store.LoadSettings().StartInTray {
+		t.Fatal("칸이 없는 예전 설정 파일은 켜짐이어야 함")
+	}
+	s := newServer()
+	if code, out := call(t, s, "POST", "/api/background", map[string]any{"start_in_tray": false}); code != http.StatusOK || store.LoadSettings().StartInTray {
+		t.Fatalf("끄기: %d %v", code, out)
+	}
+	if code, out := call(t, s, "POST", "/api/background", map[string]any{"paused": true}); code != http.StatusOK || store.LoadSettings().StartInTray {
+		t.Fatalf("다른 설정을 바꿔도 꺼진 채여야 함: %d %v", code, out)
+	}
+	if code, out := call(t, s, "POST", "/api/background", map[string]any{"start_in_tray": true}); code != http.StatusOK || !store.LoadSettings().StartInTray {
+		t.Fatalf("켜기: %d %v", code, out)
+	}
+}
+
 // 알림 API: 남기기·목록·읽음·삭제, 상태에 안 읽은 수.
 func TestNoticesAPI(t *testing.T) {
 	home(t, "nodrive")

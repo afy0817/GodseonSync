@@ -321,4 +321,9 @@ const EN = {
   "일반": "General",
   "제외 규칙": "Exclusions",
   "모드": "Mode",
+  "시작시 트레이에서 실행": "Start in tray",
+  "부팅 후 자동으로 실행될 때 설정 창을 열지 않고 메뉴 막대 아이콘으로만 실행합니다.": "When started automatically after boot, run only as the menu bar icon without opening the settings window.",
+  "부팅 후 자동으로 실행될 때 설정 창을 열지 않고 알림 영역 아이콘으로만 실행합니다.": "When started automatically after boot, run only as the notification area icon without opening the settings window.",
+  "부팅 후에는 트레이에서만 실행합니다.": "After boot, GodseonSync starts in the tray only.",
+  "부팅 후에도 설정 창을 엽니다.": "After boot, the settings window opens too.",
 };

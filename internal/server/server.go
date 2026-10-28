@@ -1052,10 +1052,11 @@ func (s *Server) chooseFolder(r *http.Request) (any, error) {
 
 func (s *Server) background(r *http.Request) (any, error) {
 	var body struct {
-		Autostart *bool   `json:"autostart"`
-		Interval  *int    `json:"interval_minutes"`
-		Paused    *bool   `json:"paused"`
-		Language  *string `json:"language"`
+		Autostart   *bool   `json:"autostart"`
+		StartInTray *bool   `json:"start_in_tray"`
+		Interval    *int    `json:"interval_minutes"`
+		Paused      *bool   `json:"paused"`
+		Language    *string `json:"language"`
 	}
 	if err := decode(r, &body); err != nil {
 		return nil, err
@@ -1069,6 +1070,9 @@ func (s *Server) background(r *http.Request) (any, error) {
 	}
 	if body.Paused != nil {
 		st.Paused = *body.Paused
+	}
+	if body.StartInTray != nil {
+		st.StartInTray = *body.StartInTray
 	}
 	if body.Language != nil {
 		if *body.Language != i18n.Korean && *body.Language != i18n.English {

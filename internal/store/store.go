@@ -106,6 +106,7 @@ type Settings struct {
 	Root            string `json:"root"`             // 내 드라이브의 GodseonSync 폴더 (setting.json 이 있는 곳, 바꿀 수 없음)
 	IntervalMinutes int    `json:"interval_minutes"` // 백그라운드 동기화 주기
 	Paused          bool   `json:"paused"`           // 백그라운드 동기화 일시 정지
+	StartInTray     bool   `json:"start_in_tray"`    // 시작시 트레이에서 실행: 부팅(로그인) 뒤 자동으로 시작할 때 설정 창을 열지 않음 (기본 켜짐이라 omitempty 없음)
 	Configured      bool   `json:"configured"`
 	Language        string `json:"language,omitempty"` // 화면·알림 언어: ko / en (비면 설정 화면이 시스템 언어로 정해 저장한다)
 }
@@ -116,7 +117,7 @@ var settingsMu sync.Mutex
 func LoadSettings() Settings {
 	settingsMu.Lock()
 	defer settingsMu.Unlock()
-	s := Settings{Remote: "gdrive", Root: "GodseonSync", IntervalMinutes: 10}
+	s := Settings{Remote: "gdrive", Root: "GodseonSync", IntervalMinutes: 10, StartInTray: true}
 	_ = ReadJSON(SettingsFile(), &s)
 	changed := false
 	if s.ClientID == "" {

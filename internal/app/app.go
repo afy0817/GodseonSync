@@ -58,15 +58,16 @@ func Main(args []string) int {
 	var err error
 	switch cmd {
 	case "open":
-		err = agent.Run(agent.Options{OpenUI: true})
+		// 로그인 직후 OS 가 인자 없이 띄운 실행(맥 '로그인 항목' 등)도 로그인 자동 실행으로 본다
+		err = agent.Run(agent.Options{OpenUI: !platform.JustLoggedIn() || loginOpenUI()})
 	case "agent":
 		fs := flag.NewFlagSet("agent", flag.ContinueOnError)
-		background := fs.Bool("background", false, i18n.T("설정 화면을 열지 않음 (로그인 자동 실행)"))
+		background := fs.Bool("background", false, i18n.T("로그인 자동 실행 (트레이 실행 설정 따름)"))
 		noTray := fs.Bool("no-tray", false, i18n.T("트레이 아이콘 없이 실행"))
 		if err := fs.Parse(args); err != nil {
 			return 2
 		}
-		err = agent.Run(agent.Options{OpenUI: !*background, NoTray: *noTray})
+		err = agent.Run(agent.Options{OpenUI: !*background || (loginOpenUI() && !*noTray), NoTray: *noTray})
 	case "window":
 		err = runWindow()
 	case "sync":
@@ -125,6 +126,9 @@ func Main(args []string) int {
 	}
 	return 0
 }
+
+// loginOpenUI 는 로그인 자동 실행으로 시작할 때 설정 창을 열지다 ('시작시 트레이에서 실행'을 끈 PC 만).
+func loginOpenUI() bool { return !store.LoadSettings().StartInTray }
 
 func cmdSync(args []string) int {
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)

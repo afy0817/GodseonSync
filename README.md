@@ -56,6 +56,8 @@ GodseonSync 를 실행하면 설정 창이 열립니다.
    - 다른 PC 에서 이미 쓰고 있으면 **새 PC 로 등록**하거나, 다시 설치한 PC 라면 예전 PC 를 **이어받기** 합니다.
    - **모든 PC 가 같은 구글 계정(또는 같은 SFTP 서버·사용자·폴더)으로 연결해야** 같은 설정을 함께 씁니다.
 3. **백그라운드 실행** — 컴퓨터에 로그인할 때 자동으로 실행할지 고릅니다.
+   부팅 후 자동으로 실행될 때는 설정 창을 열지 않고 트레이(맥은 메뉴 막대) 아이콘으로만 실행합니다 (**설정 › 일반 › 시작시 트레이에서 실행**, 기본 켜짐).
+   맥 시스템 설정의 **로그인 항목**에 GodseonSync 를 직접 넣어 로그인 직후 실행된 경우도 같습니다.
 
 ## 동기화할 폴더 추가
 
@@ -99,7 +101,7 @@ GodseonSync 를 실행하면 설정 창이 열립니다.
 |---|---|
 | **폴더** | 동기화 폴더 목록과 폴더마다 드라이브 경로·PC 별 경로·제외 규칙, 상태 |
 | **등록 PC** | 같은 저장소를 쓰는 PC 목록과 각 PC 의 마지막 동기화 (이름 바꾸기, 목록에서 빼기) |
-| **설정** | **일반**(언어, 자동 실행, 일시 정지, 동기화 주기) · **제외 규칙** · **모드**(구글 드라이브/SFTP, 다시 연결, 저장소 바꾸기) · **이 PC**(처음 설정 다시 하기, 연결 해제, 종료) · **로그**(전체 / 폴더별) |
+| **설정** | **일반**(언어, 자동 실행, 시작시 트레이에서 실행, 일시 정지, 동기화 주기) · **제외 규칙** · **모드**(구글 드라이브/SFTP, 다시 연결, 저장소 바꾸기) · **이 PC**(처음 설정 다시 하기, 연결 해제, 종료) · **로그**(전체 / 폴더별) |
 
 - **로그**: **설정 › 로그**에서 **전체** 또는 폴더 이름을 고릅니다. 폴더 카드의 **로그** 버튼으로도 그 폴더 로그가 바로 열립니다.
   - **전체**: GodseonSync 시작·종료, 설정 변경, 그리고 폴더마다 동기화 결과 한 줄 (`[문서] ✓ 완료 (6초): 올림 2개, 받음 1개`).
@@ -250,6 +252,7 @@ GodseonSync keeps folders on multiple PCs in two-way sync through Google Drive o
   Each PC is registered on its own, even two Windows PCs.
 - **Set up once** — the folder list and per-PC paths are stored in the storage (`GodseonSync/setting.json`), so every PC picks up changes.
 - **Runs in the background** from the menu bar / system tray. PCs don't need to be on at the same time.
+  When it starts automatically after boot, it stays in the tray without opening the settings window (Settings › General › Start in tray, on by default).
 - **Safe first sync** — the first sync never deletes anything. If both sides already have different files, that folder pauses and asks
   which way to go (drive → this PC, this PC → drive, or merge); the side being overwritten is backed up as `<folder>_backup_<timestamp>` first.
 - Notification center (bell icon), system notifications, Korean and English UI (Settings › General › Language).

@@ -34,7 +34,7 @@ var en = map[string]string{
 	"%d분 전":       "%d min ago",
 	"%d시간 전":      "%d h ago",
 	"1월 2일 15:04": "Jan 2 15:04",
-	"설정 화면을 열지 않음 (로그인 자동 실행)":                "don't open the settings window (start at login)",
+	"로그인 자동 실행 (트레이 실행 설정 따름)":                "start at login (follows the 'Start in tray' setting)",
 	"트레이 아이콘 없이 실행":                           "run without a tray icon",
 	"줄 수":                                     "number of lines",
 	"로그 지우기":                                  "clear the log",

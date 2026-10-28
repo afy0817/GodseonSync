@@ -845,6 +845,8 @@ function renderSettingsTab(cfg) {
       <div class="section-head"><div><h2>${t('백그라운드 실행')}</h2><p>${ov.os === 'mac' ? t('GodseonSync 는 메뉴 막대 아이콘으로 실행되고, 정해진 주기마다 동기화합니다.') : t('GodseonSync 는 작업 표시줄 알림 영역 아이콘으로 실행되고, 정해진 주기마다 동기화합니다.')}</p></div></div>
       <div class="card stack">
         <label class="switch"><input type="checkbox" data-bg="autostart" ${ov.autostart.enabled ? 'checked' : ''}><span class="track"></span><span>${t('로그인할 때 자동으로 실행')}</span></label>
+        <label class="switch"><input type="checkbox" data-bg="start_in_tray" ${st.start_in_tray ? 'checked' : ''}><span class="track"></span>
+          <span>${t('시작시 트레이에서 실행')}<br><span class="muted small">${ov.os === 'mac' ? t('부팅 후 자동으로 실행될 때 설정 창을 열지 않고 메뉴 막대 아이콘으로만 실행합니다.') : t('부팅 후 자동으로 실행될 때 설정 창을 열지 않고 알림 영역 아이콘으로만 실행합니다.')}</span></span></label>
         <label class="switch"><input type="checkbox" data-bg="paused" ${st.paused ? 'checked' : ''}><span class="track"></span><span>${t('자동 동기화 일시 정지')}</span></label>
         <div class="row"><span>${t('동기화 주기')}</span>
           <select data-bg="interval_minutes" style="width:auto">
@@ -1277,6 +1279,7 @@ document.addEventListener('change', async (e) => {
     await loadOverview();
     render();
     toast(k === 'autostart' ? (el.checked ? t('로그인할 때 자동으로 실행합니다.') : t('자동 실행을 껐습니다.'))
+      : k === 'start_in_tray' ? (el.checked ? t('부팅 후에는 트레이에서만 실행합니다.') : t('부팅 후에도 설정 창을 엽니다.'))
       : k === 'paused' ? (el.checked ? t('자동 동기화를 멈췄습니다.') : t('자동 동기화를 다시 시작합니다.'))
         : t('동기화 주기를 바꿨습니다.'));
   } catch (err) {
