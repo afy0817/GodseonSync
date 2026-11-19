@@ -10,7 +10,7 @@ import (
 // 폴더 로그는 폴더마다 따로, Both 는 전체 로그에도 [이름] 을 붙여 남긴다. 지우기·정리·이상한 ID 거절.
 func TestFolderLog(t *testing.T) {
 	t.Setenv("GODSEONSYNC_HOME", t.TempDir())
-	Log("GodseonSync 시작 (설정 화면 포트 %d)", 9417)
+	Log("GodseonSync 시작 (설정 화면 포트 %d)", 9494)
 	doc, pic := FolderLog{ID: "f-doc", Name: "문서"}, FolderLog{ID: "f-pic", Name: "사진"}
 	doc.Log("  ↑ 올림%s: %s", "", "a.txt")
 	doc.Both("✓ 완료 (%s): %s", "1초", "올림 1개")

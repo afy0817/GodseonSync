@@ -32,9 +32,9 @@ import (
 	"github.com/afy0817/GodseonSync/web"
 )
 
-// PreferredPort 를 먼저 쓰고, 사용 중이면 아무 포트나 쓴다. 9417 은 IANA 에 등록되지 않았고
+// PreferredPort 를 먼저 쓰고, 사용 중이면 아무 포트나 쓴다. 9494 는 IANA 에 등록되지 않았고
 // 맥·윈도우(49152~)·리눅스(32768~) 의 임시 포트 범위 밖이라 다른 프로그램과 잘 겹치지 않는다.
-const PreferredPort = 9417
+const PreferredPort = 9494
 
 // Controller 는 서버가 에이전트(트레이·예약 동기화)에 시키는 일이다.
 type Controller interface {

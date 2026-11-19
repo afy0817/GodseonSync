@@ -37,7 +37,7 @@ func (fakeCtrl) Quit()                          {}
 
 func newServer() *Server {
 	s := New(fakeCtrl{})
-	s.Port = 9417
+	s.Port = 9494
 	return s
 }
 
@@ -49,7 +49,7 @@ func call(t *testing.T, s *Server, method, path string, body any) (int, map[stri
 		_ = json.NewEncoder(&buf).Encode(body)
 	}
 	req := httptest.NewRequest(method, path, &buf)
-	req.Host = "127.0.0.1:9417"
+	req.Host = "127.0.0.1:9494"
 	req.Header.Set("X-GS-Token", s.Token)
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
@@ -411,7 +411,7 @@ func TestMigrateThenSyncResyncs(t *testing.T) {
 func TestLogAPI(t *testing.T) {
 	home(t, "nodrive")
 	s := newServer()
-	store.Log("GodseonSync 시작 (설정 화면 포트 %d)", 9417)
+	store.Log("GodseonSync 시작 (설정 화면 포트 %d)", 9494)
 	store.FolderLog{ID: "f-1", Name: "문서"}.Both("✓ 완료 (%s): %s", "1초", "바뀐 파일 없음")
 	store.FolderLog{ID: "f-1", Name: "문서"}.Log("  ↑ 올림%s: %s", "", "a.txt")
 	_, all := call(t, s, "GET", "/api/log?lines=50", nil)
